@@ -1,1 +1,0 @@
-# bitrise-step-maestro-test
