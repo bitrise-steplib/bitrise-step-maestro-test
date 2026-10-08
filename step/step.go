@@ -11,7 +11,7 @@ import (
 
 	"github.com/bitrise-io/go-android/v2/testresult/junitxml"
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
-	"github.com/bitrise-io/go-steputils/v2/testresultexport"
+	"github.com/bitrise-io/go-steputils/v2/testresultexport" //nolint:staticcheck // no non-deprecated exporter writes the test result dir layout yet
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/fileutil"
 	"github.com/bitrise-io/go-utils/v2/log"
