@@ -1,6 +1,7 @@
 package step
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"maps"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/bitrise-io/go-android/v2/testresult/junitxml"
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
-	"github.com/bitrise-io/go-steputils/v2/testresultexport" //nolint:staticcheck // no non-deprecated exporter writes the test result dir layout yet
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/fileutil"
 	"github.com/bitrise-io/go-utils/v2/log"
@@ -266,13 +266,12 @@ func (s Step) exportTestResults(config Config, result Result) {
 		reportPath = linkedReportPath
 	}
 
-	exporter := testresultexport.NewExporter(config.TestResultDir, s.fileManager)
-	if err := exporter.ExportTest(config.TestName, reportPath); err != nil {
+	testRunDir := filepath.Join(config.TestResultDir, config.TestName)
+	if err := s.exportReport(testRunDir, config.TestName, reportPath); err != nil {
 		s.logger.Warnf("Failed to export test results: %s", err)
 		return
 	}
 
-	testRunDir := filepath.Join(config.TestResultDir, config.TestName)
 	attached := 0
 	for _, folder := range slices.Sorted(maps.Keys(linked)) {
 		bundle := linked[folder]
@@ -291,6 +290,23 @@ func (s Step) exportTestResults(config Config, result Result) {
 	}
 
 	s.logger.Donef("Test results exported as %q with %d attachments", config.TestName, attached)
+}
+
+// exportReport writes the report in the layout the Deploy to Bitrise.io Step picks up from $BITRISE_TEST_RESULT_DIR.
+func (s Step) exportReport(testRunDir, testName, reportPath string) error {
+	if err := os.MkdirAll(testRunDir, 0755); err != nil {
+		return err
+	}
+	testInfo, err := json.Marshal(struct {
+		TestName string `json:"test-name"`
+	}{testName})
+	if err != nil {
+		return err
+	}
+	if err := s.fileManager.WriteBytes(filepath.Join(testRunDir, "test-info.json"), testInfo); err != nil {
+		return err
+	}
+	return s.fileManager.CopyFile(reportPath, filepath.Join(testRunDir, filepath.Base(reportPath)), &fileutil.CopyOptions{Overwrite: true})
 }
 
 // reportWithAttachments writes a copy of the JUnit report with the flows' Maestro output linked to their

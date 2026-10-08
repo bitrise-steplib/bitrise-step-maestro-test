@@ -115,6 +115,10 @@ func TestExportOutputs_NoBundlesExportsOriginalReport(t *testing.T) {
 	exported, err := os.ReadFile(filepath.Join(testResultDir, "Maestro", junitReportFileName))
 	require.NoError(t, err)
 	assert.Equal(t, maestroJUnitReport, string(exported))
+
+	testInfo, err := os.ReadFile(filepath.Join(testResultDir, "Maestro", "test-info.json"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"test-name":"Maestro"}`, string(testInfo), "the deploy step names the test run from test-info.json")
 }
 
 func TestLinkAttachments_KeepsExistingAttachmentNames(t *testing.T) {
