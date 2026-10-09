@@ -40,18 +40,18 @@ var animationSettings = []string{"window_animation_scale", "transition_animation
 type androidDevices struct {
 	logger         log.Logger
 	commandFactory command.Factory
-	androidHome    string
+	sdkDir         string
 	adb            string
 	serialHint     string
 	deployDir      string
 }
 
-func newAndroidDevices(logger log.Logger, commandFactory command.Factory, androidHome, serialHint, deployDir string) androidDevices {
+func newAndroidDevices(logger log.Logger, commandFactory command.Factory, sdkDir, serialHint, deployDir string) androidDevices {
 	return androidDevices{
 		logger:         logger,
 		commandFactory: commandFactory,
-		androidHome:    androidHome,
-		adb:            adbPath(androidHome),
+		sdkDir:         sdkDir,
+		adb:            adbPath(sdkDir),
 		serialHint:     serialHint,
 		deployDir:      deployDir,
 	}
@@ -59,9 +59,9 @@ func newAndroidDevices(logger log.Logger, commandFactory command.Factory, androi
 
 // adbPath is the SDK's adb, the one adbmanager runs too, and adb on PATH only without an SDK: adb clients of different
 // versions restart each other's server, which drops the emulator connection.
-func adbPath(androidHome string) string {
-	if androidHome != "" {
-		pth := filepath.Join(androidHome, "platform-tools", "adb")
+func adbPath(sdkDir string) string {
+	if sdkDir != "" {
+		pth := filepath.Join(sdkDir, "platform-tools", "adb")
 		if _, err := os.Stat(pth); err == nil {
 			return pth
 		}
@@ -69,7 +69,7 @@ func adbPath(androidHome string) string {
 	return "adb"
 }
 
-func resolveAndroidHome(androidHome, androidSDKRoot string) string {
+func findAndroidSDKDir(androidHome, androidSDKRoot string) string {
 	sdkModel, err := sdk.NewDefaultModel(sdk.Environment{AndroidHome: androidHome, AndroidSDKRoot: androidSDKRoot}, pathutil.NewPathChecker())
 	if err != nil {
 		return ""
@@ -78,7 +78,7 @@ func resolveAndroidHome(androidHome, androidSDKRoot string) string {
 }
 
 func (a androidDevices) acquire() (Device, error) {
-	sdkModel, adb, err := a.sdk()
+	sdkModel, adbManager, err := a.sdk()
 	if err != nil {
 		return Device{}, err
 	}
@@ -100,38 +100,38 @@ func (a androidDevices) acquire() (Device, error) {
 		} else {
 			a.logger.Printf("Using the running device: %s", serial)
 		}
-		if err := adb.WaitForDevice(serial, androidBootTimeout); err != nil {
+		if err := adbManager.WaitForDevice(serial, androidBootTimeout); err != nil {
 			return Device{}, err
 		}
 		return Device{ID: serial}, nil
 	}
 
 	a.logger.Printf("No running device, booting an emulator")
-	return a.boot(sdkModel, adb)
+	return a.boot(sdkModel, adbManager)
 }
 
 func (a androidDevices) sdk() (*sdk.Model, *adbmanager.Model, error) {
-	if a.androidHome == "" {
+	if a.sdkDir == "" {
 		return nil, nil, errors.New("the Step needs the Android SDK, but neither ANDROID_HOME nor ANDROID_SDK_ROOT points to one")
 	}
-	sdkModel, err := sdk.New(a.androidHome, pathutil.NewPathChecker())
+	sdkModel, err := sdk.New(a.sdkDir, pathutil.NewPathChecker())
 	if err != nil {
-		return nil, nil, fmt.Errorf("init Android SDK (%s): %w", a.androidHome, err)
+		return nil, nil, fmt.Errorf("init Android SDK (%s): %w", a.sdkDir, err)
 	}
-	adb, err := adbmanager.New(sdkModel, a.commandFactory, a.logger)
+	adbManager, err := adbmanager.New(sdkModel, a.commandFactory, a.logger)
 	if err != nil {
 		return nil, nil, err
 	}
-	return sdkModel, adb, nil
+	return sdkModel, adbManager, nil
 }
 
-func (a androidDevices) boot(sdkModel *sdk.Model, adb *adbmanager.Model) (Device, error) {
+func (a androidDevices) boot(sdkModel *sdk.Model, adbManager *adbmanager.Model) (Device, error) {
 	cmdlineToolsPath, err := sdkModel.CmdlineToolsPath()
 	if err != nil {
 		return Device{}, err
 	}
 
-	installed, err := installedSystemImages(a.androidHome)
+	installed, err := installedSystemImages(a.sdkDir)
 	if err != nil {
 		return Device{}, err
 	}
@@ -151,7 +151,7 @@ func (a androidDevices) boot(sdkModel *sdk.Model, adb *adbmanager.Model) (Device
 	}
 	release := func() { emulator.stop(a.logger, a.commandFactory, a.adb) }
 
-	if err := adb.WaitForDevice(emulator.serial, androidBootTimeout-time.Since(start)); err != nil {
+	if err := adbManager.WaitForDevice(emulator.serial, androidBootTimeout-time.Since(start)); err != nil {
 		release()
 		return Device{}, fmt.Errorf("%w, emulator log: %s", err, emulator.logPath)
 	}
@@ -211,7 +211,7 @@ func (a androidDevices) startEmulator() (runningEmulator, error) {
 		"-gpu", "auto",
 		"-camera-back", "none", "-camera-front", "none",
 	}
-	cmd := a.commandFactory.Create(filepath.Join(a.androidHome, "emulator", "emulator"), args, &command.Opts{Stdout: logFile, Stderr: logFile})
+	cmd := a.commandFactory.Create(filepath.Join(a.sdkDir, "emulator", "emulator"), args, &command.Opts{Stdout: logFile, Stderr: logFile})
 	a.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
@@ -313,8 +313,8 @@ func parseADBDevices(out string) []string {
 	return serials
 }
 
-func installedSystemImages(androidHome string) ([]string, error) {
-	dirs, err := filepath.Glob(filepath.Join(androidHome, systemImagePrefix, "*", "*", "*"))
+func installedSystemImages(sdkDir string) ([]string, error) {
+	dirs, err := filepath.Glob(filepath.Join(sdkDir, systemImagePrefix, "*", "*", "*"))
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func installedSystemImages(androidHome string) ([]string, error) {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
-		rel, err := filepath.Rel(androidHome, dir)
+		rel, err := filepath.Rel(sdkDir, dir)
 		if err != nil {
 			return nil, err
 		}

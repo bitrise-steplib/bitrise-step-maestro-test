@@ -14,21 +14,21 @@ import (
 )
 
 func TestRunningDevices_UsesTheSDKAdb(t *testing.T) {
-	androidHome := t.TempDir()
-	writeExecutable(t, filepath.Join(androidHome, "platform-tools", "adb"), "printf 'List of devices attached\\nemulator-5554\\tdevice\\n'\n")
+	sdkDir := t.TempDir()
+	writeExecutable(t, filepath.Join(sdkDir, "platform-tools", "adb"), "printf 'List of devices attached\\nemulator-5554\\tdevice\\n'\n")
 	fakeOnPath(t, "adb", "printf 'List of devices attached\\n'\n")
 
-	running, err := testAndroidDevices(androidHome).runningDevices()
+	running, err := testAndroidDevices(sdkDir).runningDevices()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"emulator-5554"}, running)
 }
 
 func TestInstallAppCommand_UsesTheSDKAdb(t *testing.T) {
-	androidHome := t.TempDir()
-	sdkAdb := filepath.Join(androidHome, "platform-tools", "adb")
+	sdkDir := t.TempDir()
+	sdkAdb := filepath.Join(sdkDir, "platform-tools", "adb")
 	writeExecutable(t, sdkAdb, "")
 
-	name, _ := installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "emulator-5554", androidHome)
+	name, _ := installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "emulator-5554", sdkDir)
 	assert.Equal(t, sdkAdb, name)
 
 	name, _ = installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "emulator-5554", t.TempDir())
@@ -105,10 +105,10 @@ func TestStopEmulator_KillsAnEmulatorThatIgnoresEmuKill(t *testing.T) {
 
 // emulatorDevices fakes the emulator binary in a fresh SDK and adb on PATH, as the SDK has no platform-tools.
 func emulatorDevices(t *testing.T, emulatorScript, adbScript string) androidDevices {
-	androidHome := t.TempDir()
-	writeExecutable(t, filepath.Join(androidHome, "emulator", "emulator"), emulatorScript)
+	sdkDir := t.TempDir()
+	writeExecutable(t, filepath.Join(sdkDir, "emulator", "emulator"), emulatorScript)
 	fakeOnPath(t, "adb", adbScript)
-	return testAndroidDevices(androidHome)
+	return testAndroidDevices(sdkDir)
 }
 
 func shortenEmulatorTimings(t *testing.T) {
@@ -127,8 +127,8 @@ func assertExited(t *testing.T, emulator runningEmulator) {
 	}
 }
 
-func testAndroidDevices(androidHome string) androidDevices {
-	return newAndroidDevices(log.NewLogger(), command.NewFactory(env.NewRepository()), androidHome, "", "")
+func testAndroidDevices(sdkDir string) androidDevices {
+	return newAndroidDevices(log.NewLogger(), command.NewFactory(env.NewRepository()), sdkDir, "", "")
 }
 
 func writeExecutable(t *testing.T, pth, script string) {

@@ -117,13 +117,13 @@ func testArgs(config Config, result Result, deviceID string) []string {
 	return append(args, config.FlowPaths...)
 }
 
-func installAppCommand(app App, deviceID, androidHome string) (string, []string) {
+func installAppCommand(app App, deviceID, sdkDir string) (string, []string) {
 	if app.Platform == PlatformAndroid {
 		var args []string
 		if deviceID != "" {
 			args = append(args, "-s", deviceID)
 		}
-		return adbPath(androidHome), append(args, "install", "-r", app.Path)
+		return adbPath(sdkDir), append(args, "install", "-r", app.Path)
 	}
 
 	target := "booted"

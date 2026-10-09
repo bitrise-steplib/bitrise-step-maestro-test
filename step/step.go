@@ -55,7 +55,7 @@ type Config struct {
 	MaestroVersion maestroVersion
 	TestResultDir  string
 	DeployDir      string
-	AndroidHome    string
+	AndroidSDKDir  string
 }
 
 type Result struct {
@@ -143,7 +143,7 @@ func configFromInput(input Input) (Config, error) {
 		MaestroVersion: maestroVersion,
 		TestResultDir:  input.TestResultDir,
 		DeployDir:      input.DeployDir,
-		AndroidHome:    resolveAndroidHome(input.AndroidHome, input.AndroidSDKRoot),
+		AndroidSDKDir:  findAndroidSDKDir(input.AndroidHome, input.AndroidSDKRoot),
 	}, nil
 }
 
@@ -239,7 +239,7 @@ func (s Step) installApp(config Config, deviceID string) error {
 		return nil
 	}
 
-	name, args := installAppCommand(config.App, deviceID, config.AndroidHome)
+	name, args := installAppCommand(config.App, deviceID, config.AndroidSDKDir)
 	cmd := s.commandFactory.Create(name, args, &command.Opts{Stdout: os.Stdout, Stderr: os.Stderr})
 	s.logger.Println()
 	s.logger.Infof("Installing app")

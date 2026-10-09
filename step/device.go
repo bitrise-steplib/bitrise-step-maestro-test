@@ -42,7 +42,7 @@ func (m deviceManager) Acquire(config Config) (Device, error) {
 	if config.Platform == PlatformIOS {
 		return newIOSDevices(m.logger, m.commandFactory, m.envRepo.Get(xcodeDestinationEnv)).acquire()
 	}
-	return newAndroidDevices(m.logger, m.commandFactory, config.AndroidHome, m.envRepo.Get(emulatorSerialEnv), config.DeployDir).acquire()
+	return newAndroidDevices(m.logger, m.commandFactory, config.AndroidSDKDir, m.envRepo.Get(emulatorSerialEnv), config.DeployDir).acquire()
 }
 
 // pickRunningDevice returns the device the flows should run on, or "" when none runs and the step has to boot one.

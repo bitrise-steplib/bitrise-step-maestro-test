@@ -74,12 +74,12 @@ func TestSelectSystemImage_NoneForABI(t *testing.T) {
 }
 
 func TestInstalledSystemImages(t *testing.T) {
-	androidHome := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(androidHome, "system-images", "android-36", "google_apis", "x86_64"), 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(androidHome, "system-images", "android-37.0", "google_apis_ps16k", "x86_64"), 0755))
-	writeFile(t, filepath.Join(androidHome, "system-images", "android-35", "google_apis", "x86_64"), "not a folder")
+	sdkDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(sdkDir, "system-images", "android-36", "google_apis", "x86_64"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(sdkDir, "system-images", "android-37.0", "google_apis_ps16k", "x86_64"), 0755))
+	writeFile(t, filepath.Join(sdkDir, "system-images", "android-35", "google_apis", "x86_64"), "not a folder")
 
-	images, err := installedSystemImages(androidHome)
+	images, err := installedSystemImages(sdkDir)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{
 		"system-images;android-36;google_apis;x86_64",
