@@ -69,6 +69,14 @@ func adbPath(androidHome string) string {
 	return "adb"
 }
 
+func resolveAndroidHome(androidHome, androidSDKRoot string) string {
+	sdkModel, err := sdk.NewDefaultModel(sdk.Environment{AndroidHome: androidHome, AndroidSDKRoot: androidSDKRoot}, pathutil.NewPathChecker())
+	if err != nil {
+		return ""
+	}
+	return sdkModel.GetAndroidHome()
+}
+
 func (a androidDevices) acquire() (Device, error) {
 	sdkModel, adb, err := a.sdk()
 	if err != nil {
@@ -104,11 +112,11 @@ func (a androidDevices) acquire() (Device, error) {
 
 func (a androidDevices) sdk() (*sdk.Model, *adbmanager.Model, error) {
 	if a.androidHome == "" {
-		return nil, nil, errors.New("ANDROID_HOME is not set, the Step needs the Android SDK")
+		return nil, nil, errors.New("the Step needs the Android SDK, but neither ANDROID_HOME nor ANDROID_SDK_ROOT points to one")
 	}
 	sdkModel, err := sdk.New(a.androidHome, pathutil.NewPathChecker())
 	if err != nil {
-		return nil, nil, fmt.Errorf("init Android SDK (ANDROID_HOME: %s): %w", a.androidHome, err)
+		return nil, nil, fmt.Errorf("init Android SDK (%s): %w", a.androidHome, err)
 	}
 	adb, err := adbmanager.New(sdkModel, a.commandFactory, a.logger)
 	if err != nil {

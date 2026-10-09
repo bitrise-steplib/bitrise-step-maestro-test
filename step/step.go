@@ -39,6 +39,7 @@ type Input struct {
 	TestResultDir  string `env:"bitrise_test_result_dir,dir"`
 	DeployDir      string `env:"BITRISE_DEPLOY_DIR"`
 	AndroidHome    string `env:"ANDROID_HOME"`
+	AndroidSDKRoot string `env:"ANDROID_SDK_ROOT"`
 }
 
 type Config struct {
@@ -142,7 +143,7 @@ func configFromInput(input Input) (Config, error) {
 		MaestroVersion: maestroVersion,
 		TestResultDir:  input.TestResultDir,
 		DeployDir:      input.DeployDir,
-		AndroidHome:    input.AndroidHome,
+		AndroidHome:    resolveAndroidHome(input.AndroidHome, input.AndroidSDKRoot),
 	}, nil
 }
 

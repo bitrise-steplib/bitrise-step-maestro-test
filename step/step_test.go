@@ -50,6 +50,23 @@ func TestConfigFromInput_ManageDevice(t *testing.T) {
 
 }
 
+func TestConfigFromInput_AndroidHome(t *testing.T) {
+	sdkRoot, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	config, err := configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro", AndroidSDKRoot: sdkRoot})
+	require.NoError(t, err)
+	assert.Equal(t, sdkRoot, config.AndroidHome, "ANDROID_SDK_ROOT is used when ANDROID_HOME is unset")
+
+	config, err = configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro", AndroidHome: filepath.Join(sdkRoot, "missing"), AndroidSDKRoot: sdkRoot})
+	require.NoError(t, err)
+	assert.Equal(t, sdkRoot, config.AndroidHome, "ANDROID_SDK_ROOT is used when ANDROID_HOME is not an SDK")
+
+	config, err = configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro"})
+	require.NoError(t, err)
+	assert.Empty(t, config.AndroidHome, "a missing SDK only fails the steps that need it")
+}
+
 func TestRun_RunsOnTheAcquiredDeviceAndReleasesIt(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args.txt")
 	fakeMaestro := filepath.Join(t.TempDir(), "maestro")
