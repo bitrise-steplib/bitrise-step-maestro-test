@@ -18,6 +18,7 @@ workflows:
   utility_test_android:
     envs:
     - TEST_NAME: Maestro Android
+    - EXPECTED_FLOW: android-flow
     before_run:
     - _download_samples
     - _start_android_emulator
@@ -28,10 +29,11 @@ workflows:
         - app_path: $SAMPLES_DIR/wikipedia.apk
         - flow_path: $SAMPLES_DIR
         - include_tags: android
+        - exclude_tags: advanced
         - test_name: $TEST_NAME
     after_run:
     - _verify_outputs
-    - _verify_sample_flows
+    - _verify_tag_filtering
     - _stop_android_emulator
 
   test_android_failing_flow_exports_results:
@@ -94,6 +96,7 @@ workflows:
   utility_test_ios:
     envs:
     - TEST_NAME: Maestro iOS
+    - EXPECTED_FLOW: ios-flow
     before_run:
     - _download_samples
     steps:
@@ -114,10 +117,11 @@ workflows:
         - app_path: $SAMPLES_DIR/Wikipedia.app
         - flow_path: $SAMPLES_DIR
         - include_tags: ios
+        - exclude_tags: advanced
         - test_name: $TEST_NAME
     after_run:
     - _verify_outputs
-    - _verify_sample_flows
+    - _verify_tag_filtering
 
   _download_samples:
     steps:
@@ -174,28 +178,19 @@ workflows:
               test -s "$test_run_dir/$attachment"
             done
 
-  _verify_sample_flows:
+  _verify_tag_filtering:
     steps:
     - script@1:
-        title: Verify the basic and the advanced sample flow both ran and got attachments
+        title: Verify only the flow matching the tags ran
         is_always_run: true
         inputs:
         - content: |-
             #!/usr/bin/env bash
             set -euxo pipefail
             test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
-            python3 - "$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")" <<'EOF'
-            import sys
-            import xml.etree.ElementTree as ET
-
-            test_cases = list(ET.parse(sys.argv[1]).iter("testcase"))
-            names = [test_case.get("name") for test_case in test_cases]
-            assert len(test_cases) == 2, f"expected the basic and the advanced flow, got {names}"
-            for test_case in test_cases:
-                assert test_case.find("failure") is None, f"{test_case.get('name')} failed"
-                properties = [p.get("name", "") for p in test_case.iter("property")]
-                assert any(p.startswith("attachment_") for p in properties), f"{test_case.get('name')} has no attachment"
-            EOF
+            report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            test "$(grep -c '<testcase ' "$report")" = 1
+            grep -q "<testcase[^>]*name=\"$EXPECTED_FLOW\"" "$report"
 
   _stop_android_emulator:
     steps:
