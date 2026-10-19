@@ -27,6 +27,17 @@ const (
 	disableUpdateCheckEnv   = "MAESTRO_DISABLE_UPDATE_CHECK=true"
 )
 
+// The first line of a failed run's error message, which the build_steps error_message column is grouped by. Keep
+// them free of paths, counts and other run-specific values, and keep them unchanged across releases.
+const (
+	errProcessInputs  = "Failed to process Step inputs"
+	errInstallMaestro = "Failed to install the Maestro CLI"
+	errInstallApp     = "Failed to install the app"
+	errFlowsFailed    = "Maestro flows failed"
+	errMaestroFailed  = "Maestro failed without a failing flow"
+	errExportOutputs  = "Failed to export Step outputs"
+)
+
 type Input struct {
 	FlowPath       string `env:"flow_path,required"`
 	AppPath        string `env:"app_path"`
@@ -94,12 +105,16 @@ func New(
 func (s Step) ProcessConfig() (Config, error) {
 	var input Input
 	if err := s.inputParser.Parse(&input); err != nil {
-		return Config{}, err
+		return Config{}, fmt.Errorf("%s: %w", errProcessInputs, err)
 	}
 	stepconf.Print(input)
 	s.logger.Println()
 
-	return configFromInput(input)
+	config, err := configFromInput(input)
+	if err != nil {
+		return Config{}, fmt.Errorf("%s: %w", errProcessInputs, err)
+	}
+	return config, nil
 }
 
 func configFromInput(input Input) (Config, error) {
@@ -143,7 +158,11 @@ func (s Step) InstallDependencies(config Config) (Installation, error) {
 		s.logger.Warnf("Maestro CLI %s is not the version this Step release was tested with (%s).", config.MaestroVersion.Version, bundledMaestroVersion)
 		s.logger.Warnf("Running flows should work, but test output handling may differ. Clear maestro_version to use the tested version.")
 	}
-	return s.installer.Install(config.MaestroVersion.Version)
+	installation, err := s.installer.Install(config.MaestroVersion.Version)
+	if err != nil {
+		return Installation{}, fmt.Errorf("%s: %w", errInstallMaestro, err)
+	}
+	return installation, nil
 }
 
 func (s Step) Run(config Config, installation Installation) (Result, error) {
@@ -172,9 +191,40 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 	s.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
 
 	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("maestro test failed: %w", err)
+		return result, flowsError(result.JUnitPath, err)
 	}
 	return result, nil
+}
+
+// flowsError tells failing flows, which are the customer's tests, apart from Maestro failing for any other reason.
+// Maestro writes no report when, for example, a flow file does not parse.
+func flowsError(junitPath string, runErr error) error {
+	total, failed, err := countFlows(junitPath)
+	if err != nil || failed == 0 {
+		return fmt.Errorf("%s: %w", errMaestroFailed, runErr)
+	}
+	return fmt.Errorf("%s: %w", errFlowsFailed, fmt.Errorf("%d of %d flows failed", failed, total))
+}
+
+func countFlows(junitPath string) (total, failed int, err error) {
+	if !exists(junitPath) {
+		return 0, 0, fmt.Errorf("no JUnit report at %s", junitPath)
+	}
+	converter := junitxml.Converter{}
+	converter.Detect([]string{junitPath})
+	report, err := converter.Convert()
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, suite := range report.TestSuites {
+		for _, testCase := range suite.TestCases {
+			total++
+			if testCase.Failure != nil || testCase.Error != nil {
+				failed++
+			}
+		}
+	}
+	return total, failed, nil
 }
 
 func (s Step) ExportOutputs(config Config, result Result) error {
@@ -183,7 +233,7 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 
 	if exists(result.JUnitPath) {
 		if err := s.exporter.ExportOutput(junitPathOutputKey, result.JUnitPath); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", errExportOutputs, err)
 		}
 		s.logger.Donef("%s: %s", junitPathOutputKey, result.JUnitPath)
 
@@ -215,7 +265,7 @@ func (s Step) installApp(config Config) error {
 	s.logger.Infof("Installing app")
 	s.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("install app (%s): %w", config.App.Path, err)
+		return fmt.Errorf("%s: %w", errInstallApp, fmt.Errorf("%s: %w", config.App.Path, err))
 	}
 	return nil
 }

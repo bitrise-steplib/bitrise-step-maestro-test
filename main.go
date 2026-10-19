@@ -48,14 +48,16 @@ func runPhases(r runner, logger log.Logger) exitcode.ExitCode {
 	}
 
 	result, runErr := r.Run(config, installation)
+	exportErr := r.ExportOutputs(config, result)
 
-	if err := r.ExportOutputs(config, result); err != nil {
-		logger.Errorf("%s", errorutil.FormattedError(err))
-		return exitcode.Failure
+	// The CLI reports the last error logged, and a failed run says more than a failed export.
+	if exportErr != nil {
+		logger.Errorf("%s", errorutil.FormattedError(exportErr))
 	}
-
 	if runErr != nil {
 		logger.Errorf("%s", errorutil.FormattedError(runErr))
+	}
+	if exportErr != nil || runErr != nil {
 		return exitcode.Failure
 	}
 

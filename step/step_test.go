@@ -1,12 +1,16 @@
 package step
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/env"
+	"github.com/bitrise-io/go-utils/v2/errorutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,3 +59,78 @@ func TestConfigFromInput_AndroidSDKDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, config.AndroidSDKDir, "a missing SDK only fails the steps that need it")
 }
+
+func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
+	cause := errors.New("cause with /tmp/run-specific/path")
+	failingMaestro := filepath.Join(t.TempDir(), "maestro")
+	writeFile(t, failingMaestro, "#!/bin/sh\nexit 1\n")
+	require.NoError(t, os.Chmod(failingMaestro, 0755))
+	sdkDir := t.TempDir()
+	failingADB := filepath.Join(sdkDir, "platform-tools", "adb")
+	writeFile(t, failingADB, "#!/bin/sh\nexit 1\n")
+	require.NoError(t, os.Chmod(failingADB, 0755))
+
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	s.inputParser = fakeInputParser{err: cause}
+	s.installer = fakeInstaller{err: cause}
+	s.exporter = failingExporter{err: cause}
+
+	_, configErr := s.ProcessConfig()
+	_, installErr := s.InstallDependencies(Config{})
+	_, appErr := s.Run(Config{App: App{Path: "/tmp/app.apk", Platform: PlatformAndroid}, AndroidSDKDir: sdkDir}, Installation{})
+	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}}, Installation{BinaryPath: failingMaestro})
+	exportErr := s.ExportOutputs(Config{}, Result{JUnitPath: writeReport(t, 1, 0)})
+
+	assert.Equal(t, errProcessInputs+":", firstLine(configErr))
+	assert.Equal(t, errInstallMaestro+":", firstLine(installErr))
+	assert.Equal(t, errInstallApp+":", firstLine(appErr))
+	assert.Equal(t, errMaestroFailed+":", firstLine(flowsErr))
+	assert.Equal(t, errExportOutputs+":", firstLine(exportErr))
+}
+
+func TestFlowsError(t *testing.T) {
+	runErr := errors.New("exit status 1")
+
+	failing := flowsError(writeReport(t, 3, 2), runErr)
+	assert.Equal(t, errFlowsFailed+":\n  2 of 3 flows failed", errorutil.FormattedError(failing))
+
+	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(writeReport(t, 3, 0), runErr)), "no failing flow in the report")
+	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(filepath.Join(t.TempDir(), "missing.xml"), runErr)), "no report")
+}
+
+func writeReport(t *testing.T, total, failed int) string {
+	var cases strings.Builder
+	for i := range total {
+		if i < failed {
+			fmt.Fprintf(&cases, `<testcase name="flow%d"><failure message="Element not found"/></testcase>`, i)
+		} else {
+			fmt.Fprintf(&cases, `<testcase name="flow%d"/>`, i)
+		}
+	}
+	pth := filepath.Join(t.TempDir(), junitReportFileName)
+	writeFile(t, pth, fmt.Sprintf(`<testsuites><testsuite name="Test Suite" tests="%d" failures="%d">%s</testsuite></testsuites>`, total, failed, cases.String()))
+	return pth
+}
+
+func firstLine(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.SplitN(errorutil.FormattedError(err), "\n", 2)[0]
+}
+
+type fakeInputParser struct{ err error }
+
+func (f fakeInputParser) Parse(any) error { return f.err }
+
+type fakeInstaller struct{ err error }
+
+func (f fakeInstaller) Install(string) (Installation, error) { return Installation{}, f.err }
+
+type failingExporter struct {
+	fakeExporter
+	err error
+}
+
+func (f failingExporter) ExportOutput(string, string) error { return f.err }
