@@ -2,7 +2,7 @@
 
 [![Step changelog](https://shields.io/github/v/release/bitrise-steplib/bitrise-step-maestro-test?include_prereleases&label=changelog&color=blueviolet)](https://github.com/bitrise-steplib/bitrise-step-maestro-test/releases)
 
-Runs Maestro flows on an Android emulator or iOS simulator running on the Bitrise machine, and exports the results to Test Reports.
+Runs Maestro flows on an Android emulator or iOS simulator and exports the results to Test Reports.
 
 <details>
 <summary>Description</summary>
@@ -19,7 +19,7 @@ Add **Deploy to Bitrise.io** after this Step to upload the results.
 
 The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
 
-If several devices are running, pass the one to use with `--device` in **Additional maestro test arguments**.
+If several devices are running, pass the one to use with `--device` in **Additional maestro test arguments**, and install the app on it before this Step (clear **App path**).
 
 #### Flow variables
 
@@ -44,7 +44,7 @@ You can also run this step directly with [Bitrise CLI](https://github.com/bitris
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
-| `maestro_version` | Leave empty to use the Maestro CLI version this Step release was tested with. The Step logs which version it installs.  Set it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix. |  |  |
+| `maestro_version` | Leave empty to use the Maestro CLI version this Step release was tested with. The Step logs which version it installs.  Set it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. |  |  |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME` or `--no-reinstall-driver`. |  |  |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
 </details>
