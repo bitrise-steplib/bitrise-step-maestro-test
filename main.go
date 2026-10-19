@@ -76,6 +76,5 @@ func createStep(logger log.Logger) step.Step {
 		step.NewInstaller(logger, filedownloader.NewDownloader(logger), ziputil.NewZipManager(pathChecker), pathChecker),
 		&outputExporter,
 		fileManager,
-		step.NewDeviceManager(logger, commandFactory, envRepo),
 	)
 }

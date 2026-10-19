@@ -17,13 +17,7 @@ Add **Deploy to Bitrise.io** after this Step to upload the results.
 
 #### Device
 
-If a device is already running, for example one started by **AVD Manager** or **Xcode Start Simulator**, the Step runs the flows on it and leaves it running.
-
-If none is running, the Step boots one, and shuts it down when the flows finish:
-- Android: an emulator from the newest preinstalled system image (Linux stacks only).
-- iOS: the `Bitrise iOS default` simulator of the newest iOS runtime.
-
-To run several Maestro Test Steps on the same device, set **Shut down the device** to `no` on all but the last one. The Step then leaves the device it booted running and exports it, and the next Maestro Test Step runs on it instead of booting another one.
+The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
 
 If several devices are running, pass the one to use with `--device` in **Additional maestro test arguments**.
 
@@ -50,7 +44,6 @@ You can also run this step directly with [Bitrise CLI](https://github.com/bitris
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
-| `shutdown_device` | Shut down the device the Step booted when the flows finish. A device that was already running is never shut down.  Set it to `no` to leave the booted device running for a later Step, for example another Maestro Test Step. The Step then exports the device as `$BITRISE_EMULATOR_SERIAL` (Android) or `$BITRISE_XCODE_DESTINATION` (iOS). | required | `yes` |
 | `maestro_version` | Leave empty to use the Maestro CLI version this Step release was tested with. The Step logs which version it installs.  Set it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix. |  |  |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME` or `--no-reinstall-driver`. |  |  |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
@@ -63,8 +56,6 @@ You can also run this step directly with [Bitrise CLI](https://github.com/bitris
 | --- | --- |
 | `MAESTRO_JUNIT_PATH` | Path to the JUnit report written by Maestro. |
 | `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory. |
-| `BITRISE_EMULATOR_SERIAL` | Serial of the emulator the Step booted and left running. Only set when **Shut down the device** is `no`. |
-| `BITRISE_XCODE_DESTINATION` | Destination specifier of the simulator the Step booted and left running. Only set when **Shut down the device** is `no`. |
 </details>
 
 ## 🙋 Contributing

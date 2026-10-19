@@ -84,21 +84,21 @@ func TestTestArgs(t *testing.T) {
 		"--exclude-tags", "flaky",
 		"-e", "USERNAME=bitrise",
 		".maestro",
-	}, testArgs(config, result, ""))
+	}, testArgs(config, result))
 }
 
 func TestTestArgs_Minimal(t *testing.T) {
 	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
 	assert.Equal(t, []string{
 		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "flows/login.yaml",
-	}, testArgs(Config{FlowPaths: []string{"flows/login.yaml"}}, result, ""))
+	}, testArgs(Config{FlowPaths: []string{"flows/login.yaml"}}, result))
 }
 
 func TestTestArgs_MultipleFlowPaths(t *testing.T) {
 	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
 	assert.Equal(t, []string{
 		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "maestro/entry", "maestro/unlock",
-	}, testArgs(Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}}, result, ""))
+	}, testArgs(Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}}, result))
 }
 
 func TestSplitLines(t *testing.T) {
@@ -107,32 +107,11 @@ func TestSplitLines(t *testing.T) {
 }
 
 func TestInstallAppCommand(t *testing.T) {
-	name, args := installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "", "")
+	name, args := installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "")
 	assert.Equal(t, "adb", name)
 	assert.Equal(t, []string{"install", "-r", "app.apk"}, args)
 
-	name, args = installAppCommand(App{Path: "My.app", Platform: PlatformIOS}, "", "")
+	name, args = installAppCommand(App{Path: "My.app", Platform: PlatformIOS}, "")
 	assert.Equal(t, "xcrun", name)
 	assert.Equal(t, []string{"simctl", "install", "booted", "My.app"}, args)
-}
-
-func TestInstallAppCommand_Device(t *testing.T) {
-	_, args := installAppCommand(App{Path: "app.apk", Platform: PlatformAndroid}, "emulator-5554", "")
-	assert.Equal(t, []string{"-s", "emulator-5554", "install", "-r", "app.apk"}, args)
-
-	_, args = installAppCommand(App{Path: "My.app", Platform: PlatformIOS}, "UDID-1", "")
-	assert.Equal(t, []string{"simctl", "install", "UDID-1", "My.app"}, args)
-}
-
-func TestTestArgs_Device(t *testing.T) {
-	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
-	assert.Equal(t, []string{
-		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "--device", "emulator-5554", ".maestro",
-	}, testArgs(Config{FlowPaths: []string{".maestro"}}, result, "emulator-5554"))
-}
-
-func TestResolvePlatform(t *testing.T) {
-	assert.Equal(t, PlatformAndroid, resolvePlatform(App{Platform: PlatformAndroid}, "darwin"))
-	assert.Equal(t, PlatformIOS, resolvePlatform(App{}, "darwin"))
-	assert.Equal(t, PlatformAndroid, resolvePlatform(App{}, "linux"))
 }

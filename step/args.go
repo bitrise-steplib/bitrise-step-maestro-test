@@ -11,7 +11,6 @@ import (
 type Platform string
 
 const (
-	PlatformUnknown Platform = ""
 	PlatformAndroid Platform = "android"
 	PlatformIOS     Platform = "ios"
 )
@@ -61,13 +60,6 @@ func resolveApp(input string, goos string) (App, error) {
 	return apps[0], nil
 }
 
-func resolvePlatform(app App, goos string) Platform {
-	if app.Platform != PlatformUnknown {
-		return app.Platform
-	}
-	return hostPlatform(goos)
-}
-
 func hostPlatform(goos string) Platform {
 	if goos == "darwin" {
 		return PlatformIOS
@@ -102,11 +94,8 @@ func splitArgs(input string) ([]string, error) {
 	return shellquote.Split(input)
 }
 
-func testArgs(config Config, result Result, deviceID string) []string {
+func testArgs(config Config, result Result) []string {
 	args := []string{"test", "--format", "junit", "--output", result.JUnitPath, "--test-output-dir", result.TestOutputDir}
-	if deviceID != "" {
-		args = append(args, "--device", deviceID)
-	}
 	if len(config.IncludeTags) > 0 {
 		args = append(args, "--include-tags", strings.Join(config.IncludeTags, ","))
 	}
@@ -117,18 +106,9 @@ func testArgs(config Config, result Result, deviceID string) []string {
 	return append(args, config.FlowPaths...)
 }
 
-func installAppCommand(app App, deviceID, sdkDir string) (string, []string) {
+func installAppCommand(app App, sdkDir string) (string, []string) {
 	if app.Platform == PlatformAndroid {
-		var args []string
-		if deviceID != "" {
-			args = append(args, "-s", deviceID)
-		}
-		return adbPath(sdkDir), append(args, "install", "-r", app.Path)
+		return adbPath(sdkDir), []string{"install", "-r", app.Path}
 	}
-
-	target := "booted"
-	if deviceID != "" {
-		target = deviceID
-	}
-	return "xcrun", []string{"simctl", "install", target, app.Path}
+	return "xcrun", []string{"simctl", "install", "booted", app.Path}
 }

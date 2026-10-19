@@ -9,7 +9,7 @@ import (
 
 const (
 	bundledMaestroVersion = "2.11.0"
-	// The step passes --test-output-dir and --device to `maestro test`, both available from this release.
+	// The step passes --test-output-dir to `maestro test`, which this release already has.
 	minimumMaestroVersion = "2.1.0"
 )
 
