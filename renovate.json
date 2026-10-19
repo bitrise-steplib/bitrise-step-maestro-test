@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>bitrise-steplib/.github:renovate-config"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Maestro CLI version the Step installs by default",
+      "managerFilePatterns": ["/^step/version\\.go$/"],
+      "matchStrings": ["bundledMaestroVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "mobile-dev-inc/maestro",
+      "extractVersionTemplate": "^cli-(?<version>.+)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDepNames": ["mobile-dev-inc/maestro"],
+      "enabled": true
+    }
+  ]
+}
