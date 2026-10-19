@@ -1,4 +1,4 @@
-format_version: "11"
+format_version: "15"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
@@ -7,22 +7,38 @@ app:
 
 workflows:
   test_android:
-    steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_android
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_android:
+    title: Android flows picked by tags
+    description: Runs the basic Android flow of the Maestro samples folder, picked by include and exclude tags, on an AVD Manager emulator.
     envs:
     - TEST_NAME: Maestro Android
     - EXPECTED_FLOW: android-flow
-    before_run:
-    - _download_samples
-    - _start_android_emulator
     steps:
+    - bundle::android_tagged_flows: {}
+
+  test_android_failing_flow_exports_results:
+    title: Android failing flow
+    description: Runs a flow that fails and checks that its report and screenshot are still exported.
+    envs:
+    - TEST_NAME: Maestro Android failing
+    steps:
+    - bundle::android_failing_flow: {}
+
+  test_ios:
+    title: iOS flows picked by tags
+    description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
+    envs:
+    - TEST_NAME: Maestro iOS
+    - EXPECTED_FLOW: ios-flow
+    steps:
+    - bundle::ios_tagged_flows: {}
+
+step_bundles:
+  android_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
+    steps:
+    - bundle::download_samples: {}
+    - bundle::start_android_emulator: {}
     - path::./:
         title: Execute step
         inputs:
@@ -31,27 +47,16 @@ workflows:
         - include_tags: android
         - exclude_tags: advanced
         - test_name: $TEST_NAME
-    after_run:
-    - _verify_outputs
-    - _verify_tag_filtering
-    - _stop_android_emulator
+    - bundle::verify_outputs: {}
+    - bundle::verify_tag_filtering: {}
+    - bundle::stop_android_emulator: {}
 
-  test_android_failing_flow_exports_results:
+  android_failing_flow:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
     steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_android_failing_flow_exports_results
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_android_failing_flow_exports_results:
-    envs:
-    - TEST_NAME: Maestro Android failing
-    before_run:
-    - _download_samples
-    - _start_android_emulator
-    steps:
+    - bundle::download_samples: {}
+    - bundle::start_android_emulator: {}
     - script@1:
         title: Write a failing flow
         inputs:
@@ -80,26 +85,14 @@ workflows:
             set -euxo pipefail
             grep -q "<failure" "$MAESTRO_JUNIT_PATH"
             find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
-    after_run:
-    - _verify_outputs
-    - _stop_android_emulator
+    - bundle::verify_outputs: {}
+    - bundle::stop_android_emulator: {}
 
-  test_ios:
+  ios_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
     steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_ios
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_ios:
-    envs:
-    - TEST_NAME: Maestro iOS
-    - EXPECTED_FLOW: ios-flow
-    before_run:
-    - _download_samples
-    steps:
+    - bundle::download_samples: {}
     - xcode-start-simulator@0:
         inputs:
         - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
@@ -119,11 +112,10 @@ workflows:
         - include_tags: ios
         - exclude_tags: advanced
         - test_name: $TEST_NAME
-    after_run:
-    - _verify_outputs
-    - _verify_tag_filtering
+    - bundle::verify_outputs: {}
+    - bundle::verify_tag_filtering: {}
 
-  _download_samples:
+  download_samples:
     steps:
     - script@1:
         title: Download Maestro samples
@@ -136,7 +128,7 @@ workflows:
             unzip -q "$dir/samples.zip" -d "$dir"
             envman add --key SAMPLES_DIR --value "$dir"
 
-  _start_android_emulator:
+  start_android_emulator:
     steps:
     - script@1:
         title: Set ABI based on OS
@@ -156,7 +148,7 @@ workflows:
         - profile: pixel
         - abi: $ABI
 
-  _verify_outputs:
+  verify_outputs:
     steps:
     - script@1:
         title: Verify outputs
@@ -177,7 +169,7 @@ workflows:
               test -s "$test_run_dir/$attachment"
             done
 
-  _verify_tag_filtering:
+  verify_tag_filtering:
     steps:
     - script@1:
         title: Verify only the flow matching the tags ran
@@ -191,7 +183,7 @@ workflows:
             test "$(grep -c '<testcase ' "$report")" = 1
             grep -q "<testcase[^>]*name=\"$EXPECTED_FLOW\"" "$report"
 
-  _stop_android_emulator:
+  stop_android_emulator:
     steps:
     - script@1:
         title: Stop the emulator so the next test starts with one device
