@@ -97,7 +97,7 @@ workflows:
     steps:
     - xcode-start-simulator@0:
         inputs:
-        - destination: platform=iOS Simulator,name=iPhone 17,OS=latest
+        - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
         - wait_for_boot_timeout: 120
     - script@1:
         title: Unzip sample app
