@@ -155,6 +155,24 @@ func TestLinkAttachments_SkipsAmbiguousFlowNames(t *testing.T) {
 	assert.Nil(t, report.TestSuites[0].TestCases[0].Properties)
 }
 
+func TestLinkAttachments_ShardedFlowFolders(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Report-shard-1"},
+	}}}}
+
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-2":  {Files: []string{"logs/maestro.log"}},
+		"Report-shard-1": {Files: []string{"logs/maestro.log"}},
+	})
+
+	assert.Empty(t, result.Warnings)
+	assert.Equal(t, []testreport.Property{{Name: "attachment_0", Value: "Login-shard-2/logs/maestro.log"}},
+		report.TestSuites[0].TestCases[0].Properties.Property, "a sharded session suffixes the folder with -shard-N")
+	assert.Equal(t, []testreport.Property{{Name: "attachment_0", Value: "Report-shard-1/logs/maestro.log"}},
+		report.TestSuites[0].TestCases[1].Properties.Property, "a flow named like a shard folder keeps its own folder")
+}
+
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
 	flowDir := filepath.Join(t.TempDir(), "flows", "Flow A")
 	writeFlowBundle(t, flowDir, `{"entries":[

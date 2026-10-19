@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -130,6 +131,9 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
 		testCases := testCasesByFolder[folder]
+		if len(testCases) == 0 {
+			testCases = testCasesByFolder[shardFolderSuffix.ReplaceAllString(folder, "")]
+		}
 		switch {
 		case len(testCases) == 0:
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files are not attached", folder))
@@ -145,6 +149,9 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 	}
 	return result
 }
+
+// Maestro suffixes the output folder of a flow in a sharded session (--shard-split, --shard-all) with -shard-N.
+var shardFolderSuffix = regexp.MustCompile(`-shard-\d+$`)
 
 // flowFolderName mirrors how Maestro names a flow's output folder.
 func flowFolderName(flowName string) string {
