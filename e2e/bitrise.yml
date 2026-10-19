@@ -155,7 +155,6 @@ workflows:
         - tag: google_apis
         - profile: pixel
         - abi: $ABI
-    - wait-for-android-emulator@1: {}
 
   _verify_outputs:
     steps:

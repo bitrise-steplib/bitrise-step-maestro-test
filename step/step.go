@@ -228,19 +228,25 @@ func exists(pth string) bool {
 	return err == nil
 }
 
+// exportTestResults writes the report in the layout the Deploy to Bitrise.io Step picks up from
+// $BITRISE_TEST_RESULT_DIR: the report and a test-info.json naming the run, plus the attachments.
 func (s Step) exportTestResults(config Config, result Result) {
-	reportPath := result.JUnitPath
-	linked, linkedReportPath, err := s.reportWithAttachments(result)
-	if err != nil {
-		s.logger.Warnf("Test attachments are not exported: %s", err)
-	} else if linkedReportPath != "" {
-		reportPath = linkedReportPath
-	}
-
 	testRunDir := filepath.Join(config.TestResultDir, config.TestName)
-	if err := s.exportReport(testRunDir, config.TestName, reportPath); err != nil {
+	if err := s.writeTestInfo(testRunDir, config.TestName); err != nil {
 		s.logger.Warnf("Failed to export test results: %s", err)
 		return
+	}
+
+	reportPath := filepath.Join(testRunDir, filepath.Base(result.JUnitPath))
+	linked, err := s.writeLinkedReport(result, reportPath)
+	if err != nil {
+		s.logger.Warnf("Test attachments are not exported: %s", err)
+	}
+	if len(linked) == 0 {
+		if err := s.fileManager.CopyFile(result.JUnitPath, reportPath, &fileutil.CopyOptions{Overwrite: true}); err != nil {
+			s.logger.Warnf("Failed to export test results: %s", err)
+			return
+		}
 	}
 
 	attached := 0
@@ -263,8 +269,7 @@ func (s Step) exportTestResults(config Config, result Result) {
 	s.logger.Donef("Test results exported as %q with %d attachments", config.TestName, attached)
 }
 
-// exportReport writes the report in the layout the Deploy to Bitrise.io Step picks up from $BITRISE_TEST_RESULT_DIR.
-func (s Step) exportReport(testRunDir, testName, reportPath string) error {
+func (s Step) writeTestInfo(testRunDir, testName string) error {
 	if err := os.MkdirAll(testRunDir, 0755); err != nil {
 		return err
 	}
@@ -274,25 +279,22 @@ func (s Step) exportReport(testRunDir, testName, reportPath string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.fileManager.WriteBytes(filepath.Join(testRunDir, "test-info.json"), testInfo); err != nil {
-		return err
-	}
-	return s.fileManager.CopyFile(reportPath, filepath.Join(testRunDir, filepath.Base(reportPath)), &fileutil.CopyOptions{Overwrite: true})
+	return s.fileManager.WriteBytes(filepath.Join(testRunDir, "test-info.json"), testInfo)
 }
 
-// reportWithAttachments writes a copy of the JUnit report with the flows' Maestro output linked to their
-// test cases. It returns an empty path when there is nothing to link.
-func (s Step) reportWithAttachments(result Result) (map[string]flowBundle, string, error) {
+// writeLinkedReport writes the JUnit report to reportPath with the flows' Maestro output linked to their test
+// cases, and returns the linked flow folders. It writes nothing when there is nothing to link.
+func (s Step) writeLinkedReport(result Result, reportPath string) (map[string]flowBundle, error) {
 	converter := junitxml.Converter{}
 	converter.Detect([]string{result.JUnitPath})
 	report, err := converter.Convert()
 	if err != nil {
-		return nil, "", fmt.Errorf("parse JUnit report: %w", err)
+		return nil, fmt.Errorf("parse JUnit report: %w", err)
 	}
 
 	bundles, err := findFlowBundles(result.TestOutputDir)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	link := linkAttachments(&report, bundles)
@@ -300,22 +302,16 @@ func (s Step) reportWithAttachments(result Result) (map[string]flowBundle, strin
 		s.logger.Warnf("%s", warning)
 	}
 	if len(link.Linked) == 0 {
-		return nil, "", nil
+		return nil, nil
 	}
 
 	data, err := xml.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	data = append([]byte(xml.Header), data...)
-
-	dir, err := os.MkdirTemp("", "maestro-report")
-	if err != nil {
-		return nil, "", err
-	}
-	reportPath := filepath.Join(dir, filepath.Base(result.JUnitPath))
 	if err := os.WriteFile(reportPath, data, 0644); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return link.Linked, reportPath, nil
+	return link.Linked, nil
 }
