@@ -9,18 +9,33 @@ workflows:
   test_android:
     title: Android flows picked by tags
     description: Runs the basic Android flow of the Maestro samples folder, picked by include and exclude tags, on an AVD Manager emulator.
-    steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_android
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_android:
     envs:
     - TEST_NAME: Maestro Android
     - EXPECTED_FLOW: android-flow
+    steps:
+    - bundle::android_tagged_flows: {}
+
+  test_android_failing_flow_exports_results:
+    title: Android failing flow
+    description: Runs a flow that fails and checks that its report and screenshot are still exported.
+    envs:
+    - TEST_NAME: Maestro Android failing
+    steps:
+    - bundle::android_failing_flow: {}
+
+  test_ios:
+    title: iOS flows picked by tags
+    description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
+    envs:
+    - TEST_NAME: Maestro iOS
+    - EXPECTED_FLOW: ios-flow
+    steps:
+    - bundle::ios_tagged_flows: {}
+
+step_bundles:
+  android_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
     steps:
     - bundle::download_samples: {}
     - bundle::start_android_emulator: {}
@@ -36,20 +51,9 @@ workflows:
     - bundle::verify_tag_filtering: {}
     - bundle::stop_android_emulator: {}
 
-  test_android_failing_flow_exports_results:
-    title: Android failing flow
-    description: Runs a flow that fails and checks that its report and screenshot are still exported.
-    steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_android_failing_flow_exports_results
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_android_failing_flow_exports_results:
-    envs:
-    - TEST_NAME: Maestro Android failing
+  android_failing_flow:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
     steps:
     - bundle::download_samples: {}
     - bundle::start_android_emulator: {}
@@ -84,21 +88,9 @@ workflows:
     - bundle::verify_outputs: {}
     - bundle::stop_android_emulator: {}
 
-  test_ios:
-    title: iOS flows picked by tags
-    description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
-    steps:
-    - bitrise-run@0:
-        run_if: |-
-          {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
-        inputs:
-        - workflow_id: utility_test_ios
-        - bitrise_config_path: ./e2e/bitrise.yml
-
-  utility_test_ios:
-    envs:
-    - TEST_NAME: Maestro iOS
-    - EXPECTED_FLOW: ios-flow
+  ios_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
     steps:
     - bundle::download_samples: {}
     - xcode-start-simulator@0:
@@ -123,7 +115,6 @@ workflows:
     - bundle::verify_outputs: {}
     - bundle::verify_tag_filtering: {}
 
-step_bundles:
   download_samples:
     steps:
     - script@1:
