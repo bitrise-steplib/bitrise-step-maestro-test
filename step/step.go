@@ -44,7 +44,7 @@ type Input struct {
 	ExcludeTags    string `env:"exclude_tags"`
 	AdditionalArgs string `env:"additional_args"`
 	TestName       string `env:"test_name,required"`
-	MaestroVersion string `env:"maestro_version"`
+	MaestroVersion string `env:"maestro_version,required"`
 	TestResultDir  string `env:"bitrise_test_result_dir,dir"`
 	DeployDir      string `env:"BITRISE_DEPLOY_DIR"`
 	AndroidHome    string `env:"ANDROID_HOME"`
@@ -58,7 +58,7 @@ type Config struct {
 	ExcludeTags    []string
 	AdditionalArgs []string
 	TestName       string
-	MaestroVersion maestroVersion
+	MaestroVersion string
 	TestResultDir  string
 	DeployDir      string
 	AndroidSDKDir  string
@@ -152,12 +152,8 @@ func configFromInput(input Input) (Config, error) {
 }
 
 func (s Step) InstallDependencies(config Config) (Installation, error) {
-	s.logger.Infof("Installing Maestro CLI %s", config.MaestroVersion.Version)
-	if config.MaestroVersion.Overridden {
-		s.logger.Warnf("Maestro CLI %s is not the version this Step release was tested with (%s).", config.MaestroVersion.Version, bundledMaestroVersion)
-		s.logger.Warnf("Running flows should work, but test output handling may differ. Clear maestro_version to use the tested version.")
-	}
-	installation, err := s.installer.Install(config.MaestroVersion.Version)
+	s.logger.Infof("Installing Maestro CLI %s", config.MaestroVersion)
+	installation, err := s.installer.Install(config.MaestroVersion)
 	if err != nil {
 		return Installation{}, fmt.Errorf("%s: %w", errInstallMaestro, err)
 	}

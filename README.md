@@ -95,7 +95,7 @@ Pass Secrets to the flows under the names the flows use:
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
-| `maestro_version` | Leave empty to use the Maestro CLI version this Step release was tested with. The Step logs which version it installs.  Set it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. |  |  |
+| `maestro_version` | The Maestro CLI version to install. The default is the version this Step release was tested with.  Change it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. | required | `2.11.0` |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME` or `--no-reinstall-driver`. |  |  |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
 </details>

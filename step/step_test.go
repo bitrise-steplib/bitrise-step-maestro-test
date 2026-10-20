@@ -36,11 +36,14 @@ func TestRun_DisablesMaestroAnalyticsAndUpdateCheck(t *testing.T) {
 }
 
 func TestConfigFromInput_FlowPaths(t *testing.T) {
-	config, err := configFromInput(Input{FlowPath: "maestro/entry\nmaestro/unlock\n", AppPath: "app.apk", TestName: "Maestro"})
+	input := testInput()
+	input.FlowPath = "maestro/entry\nmaestro/unlock\n"
+	config, err := configFromInput(input)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"maestro/entry", "maestro/unlock"}, config.FlowPaths)
 
-	_, err = configFromInput(Input{FlowPath: " \n ", AppPath: "app.apk", TestName: "Maestro"})
+	input.FlowPath = " \n "
+	_, err = configFromInput(input)
 	require.ErrorContains(t, err, "flow_path")
 }
 
@@ -48,17 +51,24 @@ func TestConfigFromInput_AndroidSDKDir(t *testing.T) {
 	sdkRoot, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 
-	config, err := configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", AndroidSDKRoot: sdkRoot})
+	input := testInput()
+	input.AndroidSDKRoot = sdkRoot
+	config, err := configFromInput(input)
 	require.NoError(t, err)
 	assert.Equal(t, sdkRoot, config.AndroidSDKDir, "ANDROID_SDK_ROOT is used when ANDROID_HOME is unset")
 
-	config, err = configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", AndroidHome: filepath.Join(sdkRoot, "missing"), AndroidSDKRoot: sdkRoot})
+	input.AndroidHome = filepath.Join(sdkRoot, "missing")
+	config, err = configFromInput(input)
 	require.NoError(t, err)
 	assert.Equal(t, sdkRoot, config.AndroidSDKDir, "ANDROID_SDK_ROOT is used when ANDROID_HOME is not an SDK")
 
-	config, err = configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro"})
+	config, err = configFromInput(testInput())
 	require.NoError(t, err)
 	assert.Empty(t, config.AndroidSDKDir, "a missing SDK only fails the steps that need it")
+}
+
+func testInput() Input {
+	return Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", MaestroVersion: "2.11.0"}
 }
 
 func TestPhaseErrors_FirstLineIsStable(t *testing.T) {

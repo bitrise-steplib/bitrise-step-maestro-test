@@ -7,8 +7,8 @@
     {
       "customType": "regex",
       "description": "The Maestro CLI version the Step installs by default",
-      "managerFilePatterns": ["/^step/version\\.go$/"],
-      "matchStrings": ["bundledMaestroVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""],
+      "managerFilePatterns": ["/^step\\.yml$/"],
+      "matchStrings": ["- maestro_version: \"?(?<currentValue>[^\"\\s]+)\"?\\n"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "mobile-dev-inc/maestro",
       "extractVersionTemplate": "^cli-(?<version>.+)$"
