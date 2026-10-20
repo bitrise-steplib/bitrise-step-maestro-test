@@ -24,7 +24,8 @@ func TestRun_DisablesMaestroAnalyticsAndUpdateCheck(t *testing.T) {
 	s := testStep()
 	s.commandFactory = command.NewFactory(env.NewRepository())
 
-	_, err := s.Run(Config{FlowPaths: []string{".maestro"}}, Installation{BinaryPath: fakeMaestro})
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\n")}
+	_, err := s.Run(config, Installation{BinaryPath: fakeMaestro})
 	require.NoError(t, err)
 
 	maestroEnv, err := os.ReadFile(envFile)
@@ -35,11 +36,11 @@ func TestRun_DisablesMaestroAnalyticsAndUpdateCheck(t *testing.T) {
 }
 
 func TestConfigFromInput_FlowPaths(t *testing.T) {
-	config, err := configFromInput(Input{FlowPath: "maestro/entry\nmaestro/unlock\n", TestName: "Maestro"})
+	config, err := configFromInput(Input{FlowPath: "maestro/entry\nmaestro/unlock\n", AppPath: "app.apk", TestName: "Maestro"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"maestro/entry", "maestro/unlock"}, config.FlowPaths)
 
-	_, err = configFromInput(Input{FlowPath: " \n ", TestName: "Maestro"})
+	_, err = configFromInput(Input{FlowPath: " \n ", AppPath: "app.apk", TestName: "Maestro"})
 	require.ErrorContains(t, err, "flow_path")
 }
 
@@ -47,15 +48,15 @@ func TestConfigFromInput_AndroidSDKDir(t *testing.T) {
 	sdkRoot, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 
-	config, err := configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro", AndroidSDKRoot: sdkRoot})
+	config, err := configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", AndroidSDKRoot: sdkRoot})
 	require.NoError(t, err)
 	assert.Equal(t, sdkRoot, config.AndroidSDKDir, "ANDROID_SDK_ROOT is used when ANDROID_HOME is unset")
 
-	config, err = configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro", AndroidHome: filepath.Join(sdkRoot, "missing"), AndroidSDKRoot: sdkRoot})
+	config, err = configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", AndroidHome: filepath.Join(sdkRoot, "missing"), AndroidSDKRoot: sdkRoot})
 	require.NoError(t, err)
 	assert.Equal(t, sdkRoot, config.AndroidSDKDir, "ANDROID_SDK_ROOT is used when ANDROID_HOME is not an SDK")
 
-	config, err = configFromInput(Input{FlowPath: ".maestro", TestName: "Maestro"})
+	config, err = configFromInput(Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro"})
 	require.NoError(t, err)
 	assert.Empty(t, config.AndroidSDKDir, "a missing SDK only fails the steps that need it")
 }
@@ -65,10 +66,7 @@ func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
 	failingMaestro := filepath.Join(t.TempDir(), "maestro")
 	writeFile(t, failingMaestro, "#!/bin/sh\nexit 1\n")
 	require.NoError(t, os.Chmod(failingMaestro, 0755))
-	sdkDir := t.TempDir()
-	failingADB := filepath.Join(sdkDir, "platform-tools", "adb")
-	writeFile(t, failingADB, "#!/bin/sh\nexit 1\n")
-	require.NoError(t, os.Chmod(failingADB, 0755))
+	app := App{Path: "/tmp/app.apk", Platform: PlatformAndroid}
 
 	s := testStep()
 	s.commandFactory = command.NewFactory(env.NewRepository())
@@ -78,8 +76,8 @@ func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
 
 	_, configErr := s.ProcessConfig()
 	_, installErr := s.InstallDependencies(Config{})
-	_, appErr := s.Run(Config{App: App{Path: "/tmp/app.apk", Platform: PlatformAndroid}, AndroidSDKDir: sdkDir}, Installation{})
-	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}}, Installation{BinaryPath: failingMaestro})
+	_, appErr := s.Run(Config{App: app, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\nexit 1\n")}, Installation{})
+	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}, App: app, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\n")}, Installation{BinaryPath: failingMaestro})
 	exportErr := s.ExportOutputs(Config{}, Result{JUnitPath: writeReport(t, 1, 0)})
 
 	assert.Equal(t, errProcessInputs+":", firstLine(configErr))
@@ -111,6 +109,14 @@ func writeReport(t *testing.T, total, failed int) string {
 	pth := filepath.Join(t.TempDir(), junitReportFileName)
 	writeFile(t, pth, fmt.Sprintf(`<testsuites><testsuite name="Test Suite" tests="%d" failures="%d">%s</testsuite></testsuites>`, total, failed, cases.String()))
 	return pth
+}
+
+func fakeAndroidSDK(t *testing.T, adbScript string) string {
+	sdkDir := t.TempDir()
+	adb := filepath.Join(sdkDir, "platform-tools", "adb")
+	writeFile(t, adb, adbScript)
+	require.NoError(t, os.Chmod(adb, 0755))
+	return sdkDir
 }
 
 func firstLine(err error) string {

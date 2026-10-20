@@ -14,46 +14,15 @@ func TestParseApp(t *testing.T) {
 		want    App
 		wantErr bool
 	}{
-		{name: "empty", path: "", want: App{}},
 		{name: "apk", path: "build/app-debug.apk", want: App{Path: "build/app-debug.apk", Platform: PlatformAndroid}},
+		{name: "path with spaces", path: " custom/My App.apk\n", want: App{Path: "custom/My App.apk", Platform: PlatformAndroid}},
 		{name: "app with trailing slash", path: "Build/Wikipedia.app/", want: App{Path: "Build/Wikipedia.app/", Platform: PlatformIOS}},
 		{name: "ipa is rejected", path: "Wikipedia.ipa", wantErr: true},
+		{name: "empty is rejected", path: " ", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := parseApp(tt.path)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestResolveApp(t *testing.T) {
-	apk := App{Path: "app-debug.apk", Platform: PlatformAndroid}
-	app := App{Path: "Runner.app", Platform: PlatformIOS}
-
-	tests := []struct {
-		name    string
-		input   string
-		goos    string
-		want    App
-		wantErr bool
-	}{
-		{name: "build outputs unset", input: "\n", goos: "linux", want: App{}},
-		{name: "only the apk is set", input: "app-debug.apk\n", goos: "darwin", want: apk},
-		{name: "only the app is set", input: "\nRunner.app", goos: "linux", want: app},
-		{name: "both set on Linux", input: "app-debug.apk\nRunner.app", goos: "linux", want: apk},
-		{name: "both set on macOS", input: "app-debug.apk\nRunner.app", goos: "darwin", want: app},
-		{name: "user override", input: "custom/My App.apk", goos: "linux", want: App{Path: "custom/My App.apk", Platform: PlatformAndroid}},
-		{name: "unsupported file", input: "app-debug.apk\nRunner.ipa", goos: "darwin", wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveApp(tt.input, tt.goos)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

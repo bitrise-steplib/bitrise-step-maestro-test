@@ -3,7 +3,7 @@ summary: Runs Maestro flows on an Android emulator or iOS simulator and exports 
 description: |-
   Runs your [Maestro](https://maestro.dev) flows locally on the build machine and exports the results.
 
-  The Step installs the Maestro CLI, optionally installs your app on the device, runs `maestro test`, and exports:
+  The Step installs the Maestro CLI, installs your app on the device, runs `maestro test`, and exports:
   - the results to the Test Reports page, with each flow's screenshots, `startRecording` videos and logs attached to its test case
   - the Maestro test output folder as a zip artifact
 
@@ -12,8 +12,6 @@ description: |-
   #### Device
 
   The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
-
-  If several devices are running, pass the one to use with `--device` in **Additional maestro test arguments**, and install the app on it before this Step (clear **App path**).
 
   #### Flow variables
 
@@ -47,15 +45,15 @@ inputs:
       Maestro flow files or folders containing flow files, one per line. If a folder has a `config.yaml`, Maestro uses it.
     is_required: true
 
-- app_path: |-
-    $BITRISE_APK_PATH
-    $BITRISE_APP_DIR_PATH
+- app_path: ""
   opts:
     title: App path
-    summary: The .apk or simulator .app to install before the flows run.
+    summary: The .apk (Android) or simulator .app (iOS) to install before the flows run.
     description: |-
-      The .apk or simulator .app to install before the flows run. By default the output of **Android Build** or **Xcode Build for Simulator**, whichever is set. Set your own path to override it, or clear it if the app is already installed.
-    is_required: false
+      The .apk (Android) or simulator .app (iOS) to install before the flows run. The Step runs the flows on Android or iOS based on this file.
+
+      If you build the app with the official Bitrise Steps, use their output: `$BITRISE_APK_PATH` after **Android Build**, or `$BITRISE_APP_DIR_PATH` after **Xcode Build for Simulator**.
+    is_required: true
 
 - include_tags: ""
   opts:

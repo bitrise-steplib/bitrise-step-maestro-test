@@ -9,7 +9,7 @@ Runs Maestro flows on an Android emulator or iOS simulator and exports the resul
 
 Runs your [Maestro](https://maestro.dev) flows locally on the build machine and exports the results.
 
-The Step installs the Maestro CLI, optionally installs your app on the device, runs `maestro test`, and exports:
+The Step installs the Maestro CLI, installs your app on the device, runs `maestro test`, and exports:
 - the results to the Test Reports page, with each flow's screenshots, `startRecording` videos and logs attached to its test case
 - the Maestro test output folder as a zip artifact
 
@@ -18,8 +18,6 @@ Add **Deploy to Bitrise.io** after this Step to upload the results.
 #### Device
 
 The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
-
-If several devices are running, pass the one to use with `--device` in **Additional maestro test arguments**, and install the app on it before this Step (clear **App path**).
 
 #### Flow variables
 
@@ -45,7 +43,9 @@ Build an Android app, start an emulator, and run the flows of the `.maestro` fol
     - api_level: 34
     - tag: google_apis
     - abi: x86_64
-- maestro-test: {}
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APK_PATH
 - deploy-to-bitrise-io: {}
 ```
 
@@ -58,7 +58,9 @@ Build an iOS app for the simulator, start a simulator, and run the flows of the 
 - xcode-start-simulator:
     inputs:
     - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
-- maestro-test: {}
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APP_DIR_PATH
 - deploy-to-bitrise-io: {}
 ```
 
@@ -66,6 +68,7 @@ Run only the flows tagged `smoke`, and skip the ones tagged `flaky`:
 ```yaml
 - maestro-test:
     inputs:
+    - app_path: $BITRISE_APK_PATH
     - include_tags: smoke
     - exclude_tags: flaky
 ```
@@ -74,6 +77,7 @@ Pass Secrets to the flows under the names the flows use:
 ```yaml
 - maestro-test:
     inputs:
+    - app_path: $BITRISE_APK_PATH
     - additional_args: -e USERNAME=$TEST_ACCOUNT_USERNAME -e PASSWORD=$TEST_ACCOUNT_PASSWORD
 ```
 
@@ -86,7 +90,7 @@ Pass Secrets to the flows under the names the flows use:
 | Key | Description | Flags | Default |
 | --- | --- | --- | --- |
 | `flow_path` | Maestro flow files or folders containing flow files, one per line. If a folder has a `config.yaml`, Maestro uses it. | required | `.maestro` |
-| `app_path` | The .apk or simulator .app to install before the flows run. By default the output of **Android Build** or **Xcode Build for Simulator**, whichever is set. Set your own path to override it, or clear it if the app is already installed. |  | `$BITRISE_APK_PATH $BITRISE_APP_DIR_PATH` |
+| `app_path` | The .apk (Android) or simulator .app (iOS) to install before the flows run. The Step runs the flows on Android or iOS based on this file.  If you build the app with the official Bitrise Steps, use their output: `$BITRISE_APK_PATH` after **Android Build**, or `$BITRISE_APP_DIR_PATH` after **Xcode Build for Simulator**. | required |  |
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |

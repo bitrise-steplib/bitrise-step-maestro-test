@@ -22,10 +22,6 @@ type App struct {
 
 func parseApp(pth string) (App, error) {
 	pth = strings.TrimSpace(pth)
-	if pth == "" {
-		return App{}, nil
-	}
-
 	switch strings.ToLower(filepath.Ext(strings.TrimSuffix(pth, "/"))) {
 	case ".apk":
 		return App{Path: pth, Platform: PlatformAndroid}, nil
@@ -34,37 +30,6 @@ func parseApp(pth string) (App, error) {
 	default:
 		return App{}, fmt.Errorf("app_path must point to an .apk (Android) or a simulator .app (iOS), got: %s", pth)
 	}
-}
-
-// When app_path yields both an .apk and an .app, the host decides: Bitrise runs Android
-// emulators on Linux and iOS simulators on macOS.
-func resolveApp(input string, goos string) (App, error) {
-	var apps []App
-	for _, pth := range splitLines(input) {
-		app, err := parseApp(pth)
-		if err != nil {
-			return App{}, err
-		}
-		apps = append(apps, app)
-	}
-	if len(apps) == 0 {
-		return App{}, nil
-	}
-
-	preferred := hostPlatform(goos)
-	for _, app := range apps {
-		if app.Platform == preferred {
-			return app, nil
-		}
-	}
-	return apps[0], nil
-}
-
-func hostPlatform(goos string) Platform {
-	if goos == "darwin" {
-		return PlatformIOS
-	}
-	return PlatformAndroid
 }
 
 func splitList(input string) []string {

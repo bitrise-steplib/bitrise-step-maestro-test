@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 
 	"github.com/bitrise-io/go-android/v2/testresult/junitxml"
@@ -40,7 +39,7 @@ const (
 
 type Input struct {
 	FlowPath       string `env:"flow_path,required"`
-	AppPath        string `env:"app_path"`
+	AppPath        string `env:"app_path,required"`
 	IncludeTags    string `env:"include_tags"`
 	ExcludeTags    string `env:"exclude_tags"`
 	AdditionalArgs string `env:"additional_args"`
@@ -128,7 +127,7 @@ func configFromInput(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("additional_args: %w", err)
 	}
 
-	app, err := resolveApp(input.AppPath, runtime.GOOS)
+	app, err := parseApp(input.AppPath)
 	if err != nil {
 		return Config{}, err
 	}
@@ -255,10 +254,6 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 }
 
 func (s Step) installApp(config Config) error {
-	if config.App.Path == "" {
-		return nil
-	}
-
 	name, args := installAppCommand(config.App, config.AndroidSDKDir)
 	cmd := s.commandFactory.Create(name, args, &command.Opts{Stdout: os.Stdout, Stderr: os.Stderr})
 	s.logger.Println()

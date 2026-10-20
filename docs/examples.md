@@ -11,7 +11,9 @@ Build an Android app, start an emulator, and run the flows of the `.maestro` fol
     - api_level: 34
     - tag: google_apis
     - abi: x86_64
-- maestro-test: {}
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APK_PATH
 - deploy-to-bitrise-io: {}
 ```
 
@@ -24,7 +26,9 @@ Build an iOS app for the simulator, start a simulator, and run the flows of the 
 - xcode-start-simulator:
     inputs:
     - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
-- maestro-test: {}
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APP_DIR_PATH
 - deploy-to-bitrise-io: {}
 ```
 
@@ -32,6 +36,7 @@ Run only the flows tagged `smoke`, and skip the ones tagged `flaky`:
 ```yaml
 - maestro-test:
     inputs:
+    - app_path: $BITRISE_APK_PATH
     - include_tags: smoke
     - exclude_tags: flaky
 ```
@@ -40,5 +45,6 @@ Pass Secrets to the flows under the names the flows use:
 ```yaml
 - maestro-test:
     inputs:
+    - app_path: $BITRISE_APK_PATH
     - additional_args: -e USERNAME=$TEST_ACCOUNT_USERNAME -e PASSWORD=$TEST_ACCOUNT_PASSWORD
 ```
