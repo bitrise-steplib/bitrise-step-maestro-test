@@ -13,6 +13,8 @@ description: |-
 
   The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
 
+  Only one device of the app's platform may run: the Step fails before installing the app if it finds none or several. To run the flows on several devices, use parallel Pipeline Workflows, see the examples below.
+
   #### Flow variables
 
   Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`. To pass a variable under a different name, use `-e` in **Additional maestro test arguments**, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME`.

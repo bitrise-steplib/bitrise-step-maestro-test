@@ -24,7 +24,7 @@ func TestRun_DisablesMaestroAnalyticsAndUpdateCheck(t *testing.T) {
 	s := testStep()
 	s.commandFactory = command.NewFactory(env.NewRepository())
 
-	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\n")}
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceADB)}
 	_, err := s.Run(config, Installation{BinaryPath: fakeMaestro})
 	require.NoError(t, err)
 
@@ -86,8 +86,8 @@ func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
 
 	_, configErr := s.ProcessConfig()
 	_, installErr := s.InstallDependencies(Config{})
-	_, appErr := s.Run(Config{App: app, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\nexit 1\n")}, Installation{})
-	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}, App: app, AndroidSDKDir: fakeAndroidSDK(t, "#!/bin/sh\n")}, Installation{BinaryPath: failingMaestro})
+	_, appErr := s.Run(Config{App: app, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceADB+"exit 1\n")}, Installation{})
+	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}, App: app, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceADB)}, Installation{BinaryPath: failingMaestro})
 	exportErr := s.ExportOutputs(Config{}, Result{JUnitPath: writeReport(t, 1, 0)})
 
 	assert.Equal(t, errProcessInputs+":", firstLine(configErr))
