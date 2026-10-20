@@ -42,6 +42,34 @@ Run only the flows tagged `smoke`, and skip the ones tagged `flaky`:
     - exclude_tags: flaky
 ```
 
+Split the flows across parallel Pipeline Workflows, each running on its own VM with one emulator. Tag the flows `shard0` and `shard1`, and every copy of the Workflow runs the flows tagged with its index:
+```yaml
+pipelines:
+  ui-tests:
+    workflows:
+      maestro-tests:
+        parallel: 2
+
+workflows:
+  maestro-tests:
+    steps:
+    - android-build:
+        inputs:
+        - module: app
+        - variant: debug
+    - avd-manager:
+        inputs:
+        - api_level: 34
+        - tag: google_apis
+        - abi: x86_64
+    - maestro-test:
+        inputs:
+        - app_path: $BITRISE_APK_PATH
+        - include_tags: shard$BITRISE_IO_PARALLEL_INDEX
+        - test_name: Maestro shard $BITRISE_IO_PARALLEL_INDEX
+    - deploy-to-bitrise-io: {}
+```
+
 Pass Secrets to the flows under the names the flows use:
 ```yaml
 - maestro-test:
