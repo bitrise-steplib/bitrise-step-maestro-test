@@ -62,7 +62,7 @@ func splitArgs(input string) ([]string, error) {
 }
 
 func testArgs(config Config, result Result) []string {
-	args := []string{"test", "--format", "junit", "--output", result.JUnitPath, "--test-output-dir", result.TestOutputDir}
+	args := []string{"test", "--platform", string(config.App.Platform), "--format", "junit", "--output", result.JUnitPath, "--test-output-dir", result.TestOutputDir}
 	if len(config.IncludeTags) > 0 {
 		args = append(args, "--include-tags", strings.Join(config.IncludeTags, ","))
 	}

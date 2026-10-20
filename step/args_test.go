@@ -42,6 +42,7 @@ func TestSplitList(t *testing.T) {
 func TestTestArgs(t *testing.T) {
 	config := Config{
 		FlowPaths:      []string{".maestro"},
+		App:            App{Path: "app.apk", Platform: PlatformAndroid},
 		IncludeTags:    []string{"smoke", "android"},
 		ExcludeTags:    []string{"flaky"},
 		AdditionalArgs: []string{"-e", "USERNAME=bitrise"},
@@ -49,7 +50,7 @@ func TestTestArgs(t *testing.T) {
 	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
 
 	assert.Equal(t, []string{
-		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out",
+		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out",
 		"--include-tags", "smoke,android",
 		"--exclude-tags", "flaky",
 		"-e", "USERNAME=bitrise",
@@ -59,16 +60,18 @@ func TestTestArgs(t *testing.T) {
 
 func TestTestArgs_Minimal(t *testing.T) {
 	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
+	config := Config{FlowPaths: []string{"flows/login.yaml"}, App: App{Path: "My.app", Platform: PlatformIOS}}
 	assert.Equal(t, []string{
-		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "flows/login.yaml",
-	}, testArgs(Config{FlowPaths: []string{"flows/login.yaml"}}, result))
+		"test", "--platform", "ios", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "flows/login.yaml",
+	}, testArgs(config, result), "Maestro runs on a device of the app's platform when an emulator and a simulator both run")
 }
 
 func TestTestArgs_MultipleFlowPaths(t *testing.T) {
 	result := Result{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
+	config := Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}, App: App{Path: "app.apk", Platform: PlatformAndroid}}
 	assert.Equal(t, []string{
-		"test", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "maestro/entry", "maestro/unlock",
-	}, testArgs(Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}}, result))
+		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "maestro/entry", "maestro/unlock",
+	}, testArgs(config, result))
 }
 
 func TestSplitLines(t *testing.T) {
