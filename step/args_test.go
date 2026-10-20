@@ -12,19 +12,20 @@ func TestParseApp(t *testing.T) {
 		name    string
 		path    string
 		want    App
-		wantErr bool
+		wantErr string
 	}{
 		{name: "apk", path: "build/app-debug.apk", want: App{Path: "build/app-debug.apk", Platform: PlatformAndroid}},
 		{name: "path with spaces", path: " custom/My App.apk\n", want: App{Path: "custom/My App.apk", Platform: PlatformAndroid}},
 		{name: "app with trailing slash", path: "Build/Wikipedia.app/", want: App{Path: "Build/Wikipedia.app/", Platform: PlatformIOS}},
-		{name: "ipa is rejected", path: "Wikipedia.ipa", wantErr: true},
-		{name: "empty is rejected", path: " ", wantErr: true},
+		{name: "ipa is rejected", path: "Wikipedia.ipa", wantErr: "simulator .app"},
+		{name: "aab points to the converter Step", path: "app-release.aab", wantErr: "Export Universal APK"},
+		{name: "empty is rejected", path: " ", wantErr: "simulator .app"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := parseApp(tt.path)
-			if tt.wantErr {
-				require.Error(t, err)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)

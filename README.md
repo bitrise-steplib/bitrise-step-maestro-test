@@ -90,7 +90,7 @@ Pass Secrets to the flows under the names the flows use:
 | Key | Description | Flags | Default |
 | --- | --- | --- | --- |
 | `flow_path` | Maestro flow files or folders containing flow files, one per line. If a folder has a `config.yaml`, Maestro uses it. | required | `.maestro` |
-| `app_path` | The .apk (Android) or simulator .app (iOS) to install before the flows run. The Step runs the flows on Android or iOS based on this file.  If you build the app with the official Bitrise Steps, use their output: `$BITRISE_APK_PATH` after **Android Build**, or `$BITRISE_APP_DIR_PATH` after **Xcode Build for Simulator**. | required |  |
+| `app_path` | The .apk (Android) or simulator .app (iOS) to install before the flows run. The Step runs the flows on Android or iOS based on this file.  If you build the app with the official Bitrise Steps, use their output: `$BITRISE_APK_PATH` after **Android Build**, or `$BITRISE_APP_DIR_PATH` after **Xcode Build for Simulator**.  An Android App Bundle (.aab) cannot be installed on an emulator. Convert it with **Export Universal APK** before this Step and use its `$BITRISE_APK_PATH`. | required |  |
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |

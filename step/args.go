@@ -27,6 +27,8 @@ func parseApp(pth string) (App, error) {
 		return App{Path: pth, Platform: PlatformAndroid}, nil
 	case ".app":
 		return App{Path: pth, Platform: PlatformIOS}, nil
+	case ".aab":
+		return App{}, fmt.Errorf("app_path must point to an .apk, an Android App Bundle cannot be installed on an emulator; convert it with the Export Universal APK Step first, got: %s", pth)
 	default:
 		return App{}, fmt.Errorf("app_path must point to an .apk (Android) or a simulator .app (iOS), got: %s", pth)
 	}

@@ -53,6 +53,8 @@ inputs:
       The .apk (Android) or simulator .app (iOS) to install before the flows run. The Step runs the flows on Android or iOS based on this file.
 
       If you build the app with the official Bitrise Steps, use their output: `$BITRISE_APK_PATH` after **Android Build**, or `$BITRISE_APP_DIR_PATH` after **Xcode Build for Simulator**.
+
+      An Android App Bundle (.aab) cannot be installed on an emulator. Convert it with **Export Universal APK** before this Step and use its `$BITRISE_APK_PATH`.
     is_required: true
 
 - include_tags: ""
