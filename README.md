@@ -23,7 +23,7 @@ Only one device of the app's platform may run: the Step fails before installing 
 
 #### Flow variables
 
-Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`. To pass a variable under a different name, use `-e` in **Additional maestro test arguments**, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME`.
+Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`.
 </details>
 
 ## 🧩 Get started
@@ -104,14 +104,6 @@ workflows:
     - deploy-to-bitrise-io: {}
 ```
 
-Pass Secrets to the flows under the names the flows use:
-```yaml
-- maestro-test:
-    inputs:
-    - app_path: $BITRISE_APK_PATH
-    - additional_args: -e USERNAME=$TEST_ACCOUNT_USERNAME -e PASSWORD=$TEST_ACCOUNT_PASSWORD
-```
-
 
 ## ⚙️ Configuration
 
@@ -126,7 +118,7 @@ Pass Secrets to the flows under the names the flows use:
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
 | `maestro_version` | The Maestro CLI version to install. The default is the version this Step release was tested with.  Change it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. | required | `2.11.0` |
-| `additional_args` | Extra arguments appended to the `maestro test` command, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME` or `--no-reinstall-driver`. |  |  |
+| `additional_args` | Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`. |  |  |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
 </details>
 
