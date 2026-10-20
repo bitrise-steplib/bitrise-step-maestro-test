@@ -251,11 +251,12 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 }
 
 func (s Step) installApp(config Config) error {
-	if err := s.checkSingleDevice(config); err != nil {
+	device, err := s.findSingleDevice(config)
+	if err != nil {
 		return fmt.Errorf("%s: %w", errInstallApp, err)
 	}
 
-	name, args := installAppCommand(config.App, config.AndroidSDKDir)
+	name, args := installAppCommand(config.App, device.ID, config.AndroidSDKDir)
 	cmd := s.commandFactory.Create(name, args, &command.Opts{Stdout: os.Stdout, Stderr: os.Stderr})
 	s.logger.Println()
 	s.logger.Infof("Installing app")
@@ -266,17 +267,17 @@ func (s Step) installApp(config Config) error {
 	return nil
 }
 
-func (s Step) checkSingleDevice(config Config) error {
+func (s Step) findSingleDevice(config Config) (runningDevice, error) {
 	name, args := runningDevicesCommand(config.App.Platform, config.AndroidSDKDir)
 	output, err := s.commandFactory.Create(name, args, nil).RunAndReturnTrimmedOutput()
 	if err != nil {
-		return fmt.Errorf("list running devices: %w", err)
+		return runningDevice{}, fmt.Errorf("list running devices: %w", err)
 	}
 	devices, err := parseRunningDevices(config.App.Platform, output)
 	if err != nil {
-		return err
+		return runningDevice{}, err
 	}
-	return singleDeviceError(config.App.Platform, devices)
+	return singleDevice(config.App.Platform, devices)
 }
 
 func exists(pth string) bool {

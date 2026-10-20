@@ -73,9 +73,9 @@ func testArgs(config Config, result Result) []string {
 	return append(args, config.FlowPaths...)
 }
 
-func installAppCommand(app App, sdkDir string) (string, []string) {
+func installAppCommand(app App, deviceID, sdkDir string) (string, []string) {
 	if app.Platform == PlatformAndroid {
-		return adbPath(sdkDir), []string{"install", "-r", app.Path}
+		return adbPath(sdkDir), []string{"-s", deviceID, "install", "-r", app.Path}
 	}
-	return "xcrun", []string{"simctl", "install", "booted", app.Path}
+	return "xcrun", []string{"simctl", "install", deviceID, app.Path}
 }

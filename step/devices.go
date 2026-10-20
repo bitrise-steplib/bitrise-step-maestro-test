@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+// iosRuntimePrefix marks the simulators an iOS app can run on; a paired Apple Watch boots in a watchOS runtime.
+const iosRuntimePrefix = "com.apple.CoreSimulator.SimRuntime.iOS-"
+
+type runningDevice struct {
+	// ID is the adb serial or the simulator UDID.
+	ID   string
+	Name string
+}
+
 func runningDevicesCommand(platform Platform, sdkDir string) (string, []string) {
 	if platform == PlatformAndroid {
 		return adbPath(sdkDir), []string{"devices"}
@@ -16,25 +25,25 @@ func runningDevicesCommand(platform Platform, sdkDir string) (string, []string) 
 	return "xcrun", []string{"simctl", "list", "devices", "--json"}
 }
 
-func parseRunningDevices(platform Platform, output string) ([]string, error) {
+func parseRunningDevices(platform Platform, output string) ([]runningDevice, error) {
 	if platform == PlatformAndroid {
 		return parseADBDevices(output), nil
 	}
 	return parseBootedSimulators(output)
 }
 
-// parseADBDevices returns the serials `adb devices` lists as ready, skipping offline and unauthorized ones.
-func parseADBDevices(output string) []string {
-	var serials []string
+// parseADBDevices returns the devices `adb devices` lists as ready, skipping offline and unauthorized ones.
+func parseADBDevices(output string) []runningDevice {
+	var devices []runningDevice
 	for _, line := range strings.Split(output, "\n") {
 		if fields := strings.Fields(line); len(fields) == 2 && fields[1] == "device" {
-			serials = append(serials, fields[0])
+			devices = append(devices, runningDevice{ID: fields[0], Name: fields[0]})
 		}
 	}
-	return serials
+	return devices
 }
 
-func parseBootedSimulators(output string) ([]string, error) {
+func parseBootedSimulators(output string) ([]runningDevice, error) {
 	var list struct {
 		Devices map[string][]struct {
 			UDID  string `json:"udid"`
@@ -46,30 +55,38 @@ func parseBootedSimulators(output string) ([]string, error) {
 		return nil, fmt.Errorf("parse simctl device list: %w", err)
 	}
 
-	var simulators []string
+	var simulators []runningDevice
 	for _, runtime := range slices.Sorted(maps.Keys(list.Devices)) {
+		if !strings.HasPrefix(runtime, iosRuntimePrefix) {
+			continue
+		}
 		for _, device := range list.Devices[runtime] {
 			if device.State == "Booted" {
-				simulators = append(simulators, fmt.Sprintf("%s (%s)", device.Name, device.UDID))
+				simulators = append(simulators, runningDevice{ID: device.UDID, Name: fmt.Sprintf("%s (%s)", device.Name, device.UDID)})
 			}
 		}
 	}
 	return simulators, nil
 }
 
-// The app install and Maestro each pick a running device on their own, so with several devices the flows could
-// run on one the app was not installed on.
-func singleDeviceError(platform Platform, devices []string) error {
+// Maestro picks a running device on its own, so with several devices the flows could run on another one than the app
+// was installed on.
+func singleDevice(platform Platform, devices []runningDevice) (runningDevice, error) {
+	var names []string
+	for _, device := range devices {
+		names = append(names, device.Name)
+	}
+
 	switch {
 	case len(devices) == 1:
-		return nil
+		return devices[0], nil
 	case len(devices) == 0 && platform == PlatformAndroid:
-		return errors.New("no Android emulator or device is running, start one before this Step, for example with AVD Manager")
+		return runningDevice{}, errors.New("no Android emulator or device is running, start one before this Step, for example with AVD Manager")
 	case len(devices) == 0:
-		return errors.New("no iOS simulator is booted, boot one before this Step, for example with Xcode Start Simulator")
+		return runningDevice{}, errors.New("no iOS simulator is booted, boot one before this Step, for example with Xcode Start Simulator")
 	case platform == PlatformAndroid:
-		return fmt.Errorf("%d Android devices are running (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(devices, ", "))
+		return runningDevice{}, fmt.Errorf("%d Android devices are running (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(names, ", "))
 	default:
-		return fmt.Errorf("%d iOS simulators are booted (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(devices, ", "))
+		return runningDevice{}, fmt.Errorf("%d iOS simulators are booted (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(names, ", "))
 	}
 }
