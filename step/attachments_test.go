@@ -121,6 +121,29 @@ func TestExportOutputs_NoBundlesExportsOriginalReport(t *testing.T) {
 	assert.JSONEq(t, `{"test-name":"Maestro"}`, string(testInfo), "the deploy step names the test run from test-info.json")
 }
 
+func TestExportOutputs_TestNameWithPathSeparator(t *testing.T) {
+	workDir := t.TempDir()
+	junitPath := filepath.Join(workDir, junitReportFileName)
+	writeFile(t, junitPath, maestroJUnitReport)
+
+	testResultDir := t.TempDir()
+	err := testStep().ExportOutputs(
+		Config{TestName: "Maestro/Pixel: smoke", TestResultDir: testResultDir},
+		Result{JUnitPath: junitPath, TestOutputDir: filepath.Join(workDir, testOutputDirectoryName)},
+	)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(testResultDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	testRunDir := filepath.Join(testResultDir, entries[0].Name())
+	assert.FileExists(t, filepath.Join(testRunDir, junitReportFileName), "the deploy step only reads one folder level")
+
+	testInfo, err := os.ReadFile(filepath.Join(testRunDir, "test-info.json"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"test-name":"Maestro/Pixel: smoke"}`, string(testInfo))
+}
+
 func TestLinkAttachments_KeepsExistingAttachmentNames(t *testing.T) {
 	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{{
 		Name: "Flow A",
