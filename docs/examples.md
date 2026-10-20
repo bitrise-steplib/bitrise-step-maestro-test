@@ -69,11 +69,3 @@ workflows:
         - test_name: Maestro shard $BITRISE_IO_PARALLEL_INDEX
     - deploy-to-bitrise-io: {}
 ```
-
-Pass Secrets to the flows under the names the flows use:
-```yaml
-- maestro-test:
-    inputs:
-    - app_path: $BITRISE_APK_PATH
-    - additional_args: -e USERNAME=$TEST_ACCOUNT_USERNAME -e PASSWORD=$TEST_ACCOUNT_PASSWORD
-```

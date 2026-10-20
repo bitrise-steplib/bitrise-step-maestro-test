@@ -17,7 +17,7 @@ description: |-
 
   #### Flow variables
 
-  Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`. To pass a variable under a different name, use `-e` in **Additional maestro test arguments**, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME`.
+  Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`.
 
 website: https://github.com/bitrise-steplib/bitrise-step-maestro-test
 source_code_url: https://github.com/bitrise-steplib/bitrise-step-maestro-test
@@ -96,7 +96,7 @@ inputs:
     title: Additional maestro test arguments
     summary: Extra arguments appended to the `maestro test` command.
     description: |-
-      Extra arguments appended to the `maestro test` command, for example `-e USERNAME=$TEST_ACCOUNT_USERNAME` or `--no-reinstall-driver`.
+      Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`.
     is_required: false
 
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR
