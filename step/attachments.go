@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/v2/testasset"
@@ -122,17 +123,28 @@ type attachmentLinkResult struct {
 // linkAttachments adds an attachment_N property per bundle file to the test case of the flow. The value
 // is the file's path relative to the report's folder: <flow folder>/<path inside the flow folder>.
 func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle) attachmentLinkResult {
-	testCasesByFolder := map[string][]*testreport.TestCase{}
-	forEachTestCase(report, func(testCase *testreport.TestCase) {
-		folder := flowFolderName(testCase.Name)
-		testCasesByFolder[folder] = append(testCasesByFolder[folder], testCase)
-	})
+	testCasesByFolder := map[string][]suiteTestCase{}
+	for suite := range report.TestSuites {
+		forEachTestCaseInSuite(&report.TestSuites[suite], func(testCase *testreport.TestCase) {
+			folder := flowFolderName(testCase.Name)
+			testCasesByFolder[folder] = append(testCasesByFolder[folder], suiteTestCase{TestCase: testCase, Suite: suite})
+		})
+	}
 
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
+		if match := collisionFolderSuffix.FindStringSubmatch(folder); match != nil && len(testCasesByFolder[match[1]]) > 1 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[match[1]][0].Name, folder))
+			continue
+		}
+
 		testCases := testCasesByFolder[folder]
-		if len(testCases) == 0 {
-			testCases = testCasesByFolder[shardFolderSuffix.ReplaceAllString(folder, "")]
+		if match := shardFolderSuffix.FindStringSubmatch(folder); len(testCases) == 0 && match != nil {
+			testCases = testCasesByFolder[strings.TrimSuffix(folder, match[0])]
+			shard, _ := strconv.Atoi(match[1])
+			if inShard := inSuite(testCases, shard-1); len(inShard) == 1 {
+				testCases = inShard
+			}
 		}
 		switch {
 		case len(testCases) == 0:
@@ -144,14 +156,29 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		}
 
 		bundle := bundles[folder]
-		addAttachmentProperties(testCases[0], folder, bundle.Files)
+		addAttachmentProperties(testCases[0].TestCase, folder, bundle.Files)
 		result.Linked[folder] = bundle
 	}
 	return result
 }
 
-// Maestro suffixes the output folder of a flow in a sharded session (--shard-split, --shard-all) with -shard-N.
-var shardFolderSuffix = regexp.MustCompile(`-shard-\d+$`)
+type suiteTestCase struct {
+	*testreport.TestCase
+	Suite int
+}
+
+func inSuite(testCases []suiteTestCase, suite int) []suiteTestCase {
+	return slices.DeleteFunc(slices.Clone(testCases), func(testCase suiteTestCase) bool { return testCase.Suite != suite })
+}
+
+var (
+	// Maestro suffixes the output folder of a flow in a sharded session (--shard-split, --shard-all) with -shard-N,
+	// and writes one top-level test suite per shard, in shard order.
+	shardFolderSuffix = regexp.MustCompile(`-shard-(\d+)$`)
+	// When a flow's folder name is taken, Maestro suffixes it with -N. With duplicate flow names, such a folder
+	// can belong to any of them, or to another flow that is named like the suffixed folder.
+	collisionFolderSuffix = regexp.MustCompile(`^(.+)-\d+$`)
+)
 
 // flowFolderName mirrors how Maestro names a flow's output folder.
 func flowFolderName(flowName string) string {
@@ -184,16 +211,16 @@ func addAttachmentProperties(testCase *testreport.TestCase, folder string, files
 }
 
 func forEachTestCase(report *testreport.TestReport, fn func(*testreport.TestCase)) {
-	var visit func(suite *testreport.TestSuite)
-	visit = func(suite *testreport.TestSuite) {
-		for i := range suite.TestCases {
-			fn(&suite.TestCases[i])
-		}
-		for i := range suite.TestSuites {
-			visit(&suite.TestSuites[i])
-		}
-	}
 	for i := range report.TestSuites {
-		visit(&report.TestSuites[i])
+		forEachTestCaseInSuite(&report.TestSuites[i], fn)
+	}
+}
+
+func forEachTestCaseInSuite(suite *testreport.TestSuite, fn func(*testreport.TestCase)) {
+	for i := range suite.TestCases {
+		fn(&suite.TestCases[i])
+	}
+	for i := range suite.TestSuites {
+		forEachTestCaseInSuite(&suite.TestSuites[i], fn)
 	}
 }

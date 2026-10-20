@@ -1,6 +1,7 @@
 package step
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +172,49 @@ func TestLinkAttachments_ShardedFlowFolders(t *testing.T) {
 		report.TestSuites[0].TestCases[0].Properties.Property, "a sharded session suffixes the folder with -shard-N")
 	assert.Equal(t, []testreport.Property{{Name: "attachment_0", Value: "Report-shard-1/logs/maestro.log"}},
 		report.TestSuites[0].TestCases[1].Properties.Property, "a flow named like a shard folder keeps its own folder")
+}
+
+func TestLinkAttachments_CollidingFlowFolders(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Login"},
+		{Name: "Login-2"},
+		{Name: "Settings"},
+	}}}}
+
+	// Maestro names the second Login's folder Login-2, and the Login-2 flow's folder Login-2-2.
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login":     {Files: []string{"logs/maestro.log"}},
+		"Login-2":   {Files: []string{"logs/maestro.log"}},
+		"Login-2-2": {Files: []string{"logs/maestro.log"}},
+		"Settings":  {Files: []string{"logs/maestro.log"}},
+	})
+
+	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
+	assert.Len(t, result.Warnings, 3)
+}
+
+func TestLinkAttachments_SameFlowInEveryShard(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{
+		{TestCases: []testreport.TestCase{{Name: "Login"}, {Name: "Home"}}},
+		{TestCases: []testreport.TestCase{{Name: "Login"}, {Name: "Home"}}},
+	}}
+
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-1": {Files: []string{"logs/maestro.log"}},
+		"Login-shard-2": {Files: []string{"logs/maestro.log"}},
+		"Home-shard-1":  {Files: []string{"logs/maestro.log"}},
+		"Home-shard-2":  {Files: []string{"logs/maestro.log"}},
+	})
+
+	assert.Empty(t, result.Warnings)
+	for i, suite := range report.TestSuites {
+		shard := fmt.Sprintf("-shard-%d", i+1)
+		assert.Equal(t, []testreport.Property{{Name: "attachment_0", Value: "Login" + shard + "/logs/maestro.log"}},
+			suite.TestCases[0].Properties.Property, "Maestro writes one suite per shard, in shard order")
+		assert.Equal(t, []testreport.Property{{Name: "attachment_0", Value: "Home" + shard + "/logs/maestro.log"}},
+			suite.TestCases[1].Properties.Property)
+	}
 }
 
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
