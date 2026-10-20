@@ -58,6 +58,7 @@ Build an iOS app for the simulator, start a simulator, and run the flows of the 
 - xcode-start-simulator:
     inputs:
     - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
+    - wait_for_boot_timeout: 120
 - maestro-test:
     inputs:
     - app_path: $BITRISE_APP_DIR_PATH
