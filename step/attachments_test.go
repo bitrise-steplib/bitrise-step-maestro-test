@@ -141,7 +141,8 @@ func TestExportOutputs_TestNameWithPathSeparator(t *testing.T) {
 
 	testInfo, err := os.ReadFile(filepath.Join(testRunDir, "test-info.json"))
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"test-name":"Maestro/Pixel: smoke"}`, string(testInfo))
+	assert.JSONEq(t, `{"test-name":"`+entries[0].Name()+`"}`, string(testInfo),
+		"the deploy step names the attachments by finding the run's name in their paths")
 }
 
 func TestLinkAttachments_KeepsExistingAttachmentNames(t *testing.T) {

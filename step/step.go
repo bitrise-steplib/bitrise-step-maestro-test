@@ -290,8 +290,9 @@ func exists(pth string) bool {
 // exportTestResults writes the report in the layout the Deploy to Bitrise.io Step picks up from
 // $BITRISE_TEST_RESULT_DIR: the report and a test-info.json naming the run, plus the attachments.
 func (s Step) exportTestResults(config Config, result Result) {
-	testRunDir := filepath.Join(config.TestResultDir, testRunFolderName(config.TestName))
-	if err := s.writeTestInfo(testRunDir, config.TestName); err != nil {
+	testRun := testRunName(config.TestName)
+	testRunDir := filepath.Join(config.TestResultDir, testRun)
+	if err := s.writeTestInfo(testRunDir, testRun); err != nil {
 		s.logger.Warnf("Failed to export test results: %s", err)
 		return
 	}
@@ -325,12 +326,13 @@ func (s Step) exportTestResults(config Config, result Result) {
 		}
 	}
 
-	s.logger.Donef("Test results exported as %q with %d attachments", config.TestName, attached)
+	s.logger.Donef("Test results exported as %q with %d attachments", testRun, attached)
 }
 
-// testRunFolderName keeps the test run one folder below the test result dir, the only level the deploy step reads.
-// The test name itself goes into test-info.json unchanged.
-func testRunFolderName(testName string) string {
+// testRunName names both the test run folder and the run in test-info.json. The deploy step reads only one folder
+// level below the test result dir, and finds the attachments' names by looking for the run's name in their paths, so
+// the two have to match.
+func testRunName(testName string) string {
 	return strings.NewReplacer("/", "-", ":", "-").Replace(testName)
 }
 
