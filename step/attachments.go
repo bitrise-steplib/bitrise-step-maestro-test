@@ -130,8 +130,8 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
-		if match := collisionFolderSuffix.FindStringSubmatch(folder); match != nil && len(testCasesByFolder[match[1]]) > 1 {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[match[1]][0].Name, folder))
+		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[prefix][0].Name, folder))
 			continue
 		}
 
@@ -152,9 +152,21 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 	return result
 }
 
-// When a flow's folder name is taken, Maestro suffixes it with -N. With duplicate flow names, such a folder
-// can belong to any of them, or to another flow that is named like the suffixed folder.
+// When a flow's folder name is taken, Maestro suffixes it with -N, and suffixes chain when the suffixed
+// name is taken too (Login-2-2). With duplicate flow names, such a folder can belong to any of them, or to
+// another flow that is named like one of the suffixed folders.
 var collisionFolderSuffix = regexp.MustCompile(`^(.+)-\d+$`)
+
+// duplicatedCollisionPrefix strips -N suffixes from the folder one at a time and returns the first prefix
+// that more than one flow is named after.
+func duplicatedCollisionPrefix(folder string, testCasesByFolder map[string][]*testreport.TestCase) (string, bool) {
+	for match := collisionFolderSuffix.FindStringSubmatch(folder); match != nil; match = collisionFolderSuffix.FindStringSubmatch(match[1]) {
+		if len(testCasesByFolder[match[1]]) > 1 {
+			return match[1], true
+		}
+	}
+	return "", false
+}
 
 // flowFolderName mirrors how Maestro names a flow's output folder.
 func flowFolderName(flowName string) string {

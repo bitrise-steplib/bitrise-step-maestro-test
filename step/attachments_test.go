@@ -199,6 +199,29 @@ func TestLinkAttachments_CollidingFlowFolders(t *testing.T) {
 	assert.Len(t, result.Warnings, 3)
 }
 
+func TestLinkAttachments_CascadingFlowFolderCollisions(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Login"},
+		{Name: "Login-2"},
+		{Name: "Login-2-2"},
+		{Name: "Settings"},
+	}}}}
+
+	// Each suffixed name is taken by the time the next flow runs, so the Login-2 flow's folder is
+	// Login-2-2 and the Login-2-2 flow's folder is Login-2-2-2.
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login":       {Files: []string{"logs/maestro.log"}},
+		"Login-2":     {Files: []string{"logs/maestro.log"}},
+		"Login-2-2":   {Files: []string{"logs/maestro.log"}},
+		"Login-2-2-2": {Files: []string{"logs/maestro.log"}},
+		"Settings":    {Files: []string{"logs/maestro.log"}},
+	})
+
+	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
+	assert.Len(t, result.Warnings, 4)
+}
+
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
 	flowDir := filepath.Join(t.TempDir(), "flows", "Flow A")
 	writeFlowBundle(t, flowDir, `{"entries":[
