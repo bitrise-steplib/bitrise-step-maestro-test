@@ -1,0 +1,195 @@
+format_version: "15"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+app:
+  envs:
+  - SAMPLES_URL: https://storage.googleapis.com/mobile.dev/samples/samples.zip
+
+workflows:
+  test_android:
+    title: Android flows picked by tags
+    description: Runs the basic Android flow of the Maestro samples folder, picked by include and exclude tags, on an AVD Manager emulator.
+    envs:
+    - TEST_NAME: Maestro Android
+    - EXPECTED_FLOW: android-flow
+    steps:
+    - bundle::android_tagged_flows: {}
+
+  test_android_failing_flow_exports_results:
+    title: Android failing flow
+    description: Runs a flow that fails and checks that its report and screenshot are still exported.
+    envs:
+    - TEST_NAME: Maestro Android failing
+    steps:
+    - bundle::android_failing_flow: {}
+
+  test_ios:
+    title: iOS flows picked by tags
+    description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
+    envs:
+    - TEST_NAME: Maestro iOS
+    - EXPECTED_FLOW: ios-flow
+    steps:
+    - bundle::ios_tagged_flows: {}
+
+step_bundles:
+  android_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
+    steps:
+    - bundle::download_samples: {}
+    - bundle::start_android_emulator: {}
+    - path::./:
+        title: Execute step
+        inputs:
+        - app_path: $SAMPLES_DIR/wikipedia.apk
+        - flow_path: $SAMPLES_DIR
+        - include_tags: android
+        - exclude_tags: advanced
+        - test_name: $TEST_NAME
+    - bundle::verify_outputs: {}
+    - bundle::verify_tag_filtering: {}
+    - bundle::stop_android_emulator: {}
+
+  android_failing_flow:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
+    steps:
+    - bundle::download_samples: {}
+    - bundle::start_android_emulator: {}
+    - script@1:
+        title: Write a failing flow
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            cat > "$SAMPLES_DIR/failing-flow.yaml" <<'EOF'
+            appId: org.wikipedia
+            ---
+            - launchApp
+            - assertVisible: "This text is never on screen"
+            EOF
+    - path::./:
+        title: Execute step
+        is_skippable: true
+        inputs:
+        - app_path: $SAMPLES_DIR/wikipedia.apk
+        - flow_path: $SAMPLES_DIR/failing-flow.yaml
+        - test_name: $TEST_NAME
+    - script@1:
+        title: Verify the report has the failure
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            grep -q "<failure" "$MAESTRO_JUNIT_PATH"
+            find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
+    - bundle::verify_outputs: {}
+    - bundle::stop_android_emulator: {}
+
+  ios_tagged_flows:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
+    steps:
+    - bundle::download_samples: {}
+    - xcode-start-simulator@0:
+        inputs:
+        - destination: platform=iOS Simulator,name=Bitrise iOS default,OS=latest
+        - wait_for_boot_timeout: 120
+    - script@1:
+        title: Unzip sample app
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            unzip -q "$SAMPLES_DIR/wikipedia.zip" -d "$SAMPLES_DIR"
+    - path::./:
+        title: Execute step
+        inputs:
+        - app_path: $SAMPLES_DIR/Wikipedia.app
+        - flow_path: $SAMPLES_DIR
+        - include_tags: ios
+        - exclude_tags: advanced
+        - test_name: $TEST_NAME
+    - bundle::verify_outputs: {}
+    - bundle::verify_tag_filtering: {}
+
+  download_samples:
+    steps:
+    - script@1:
+        title: Download Maestro samples
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            dir="$(mktemp -d)"
+            curl -fsSL "$SAMPLES_URL" -o "$dir/samples.zip"
+            unzip -q "$dir/samples.zip" -d "$dir"
+            envman add --key SAMPLES_DIR --value "$dir"
+
+  start_android_emulator:
+    steps:
+    - script@1:
+        title: Set ABI based on OS
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -ex
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+              envman add --key ABI --value x86_64
+            else
+              envman add --key ABI --value arm64-v8a
+            fi
+    - avd-manager@2:
+        inputs:
+        - api_level: 34
+        - tag: google_apis
+        - profile: pixel
+        - abi: $ABI
+
+  verify_outputs:
+    steps:
+    - script@1:
+        title: Verify outputs
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            test -s "$MAESTRO_JUNIT_PATH"
+            grep -q "<testcase" "$MAESTRO_JUNIT_PATH"
+            test -s "$MAESTRO_TEST_OUTPUT_ZIP_PATH"
+
+            test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
+            test -s "$test_run_dir/test-info.json"
+            report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            grep -q 'name="attachment_0"' "$report"
+            grep -o 'name="attachment_[0-9]*" value="[^"]*"' "$report" | sed 's/.*value="\(.*\)"/\1/' | while read -r attachment; do
+              test -s "$test_run_dir/$attachment"
+            done
+
+  verify_tag_filtering:
+    steps:
+    - script@1:
+        title: Verify only the flow matching the tags ran
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
+            report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            test "$(grep -c '<testcase ' "$report")" = 1
+            grep -q "<testcase[^>]*name=\"$EXPECTED_FLOW\"" "$report"
+
+  stop_android_emulator:
+    steps:
+    - script@1:
+        title: Stop the emulator so the next test starts with one device
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            adb -s "$BITRISE_EMULATOR_SERIAL" emu kill

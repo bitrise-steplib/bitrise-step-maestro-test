@@ -1,0 +1,4 @@
+.bitrise*
+_tmp/
+.idea
+bitrise-step-maestro-test
