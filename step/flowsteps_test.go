@@ -15,18 +15,31 @@ import (
 
 var updateGolden = flag.Bool("update", false, "rewrite the golden files of the flow steps")
 
-// testdata/test-output is the output of Maestro 2.11.0 (maestro test --platform web --test-output-dir) for flows that
-// cover a passing run, a subflow, a failing optional step, a failing assertion with steps after it, a failing subflow,
-// and repeat and retry blocks.
-const fixtureOutputDir = "testdata/test-output"
+// testdata holds the output of Maestro 2.11.0 (maestro test --test-output-dir) of three platforms.
+//   - web: run locally, headless, against a local page. Flows cover a passing run, a subflow, a failing optional step,
+//     a failing assertion with steps after it, a failing subflow, and repeat and retry blocks.
+//   - ios and android: run on Bitrise, with the Wikipedia sample on a simulator and KeePassVault on an emulator. Each
+//     has a passing flow and a failing flow with a subflow, a failing optional step and a failing assertion.
+const (
+	webOutputDir     = "testdata/web/test-output"
+	iosOutputDir     = "testdata/ios/test-output"
+	androidOutputDir = "testdata/android/test-output"
+)
+
+var fixtureOutputDirs = []string{webOutputDir, iosOutputDir, androidOutputDir}
 
 func TestReadFlowSteps_MatchesGolden(t *testing.T) {
-	flowDirs, err := filepath.Glob(filepath.Join(fixtureOutputDir, "*", "*"))
-	require.NoError(t, err)
-	require.NotEmpty(t, flowDirs)
+	var flowDirs []string
+	for _, outputDir := range fixtureOutputDirs {
+		dirs, err := filepath.Glob(filepath.Join(outputDir, "*", "*"))
+		require.NoError(t, err)
+		require.NotEmpty(t, dirs)
+		flowDirs = append(flowDirs, dirs...)
+	}
 
 	for _, flowDir := range flowDirs {
-		t.Run(filepath.Base(flowDir), func(t *testing.T) {
+		platform := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(flowDir))))
+		t.Run(platform+"/"+filepath.Base(flowDir), func(t *testing.T) {
 			steps, err := readFlowSteps(flowDir)
 			require.NoError(t, err)
 			got, err := json.MarshalIndent(steps, "", "  ")
@@ -44,7 +57,7 @@ func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 }
 
 func TestReadFlowSteps_FailingFlow(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, "failing-flow"))
+	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "failing-flow"))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
@@ -75,7 +88,7 @@ func TestReadFlowSteps_FailingFlow(t *testing.T) {
 }
 
 func TestReadFlowSteps_PassingFlow(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, "passing-flow"))
+	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "passing-flow"))
 	require.NoError(t, err)
 
 	require.Len(t, steps, 5)
@@ -89,7 +102,7 @@ func TestReadFlowSteps_PassingFlow(t *testing.T) {
 }
 
 func TestReadFlowSteps_FailingSubflowFailsItsParent(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, "subflow-fails"))
+	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "subflow-fails"))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
@@ -101,7 +114,7 @@ func TestReadFlowSteps_FailingSubflowFailsItsParent(t *testing.T) {
 }
 
 func TestReadFlowSteps_EveryAttemptOfRepeatAndRetryIsAStep(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, "repeat-retry"))
+	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "repeat-retry"))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
@@ -252,7 +265,7 @@ func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 }
 
 func TestFindFlowSteps_ReadsEveryFlowFolder(t *testing.T) {
-	result, err := findFlowSteps(fixtureOutputDir)
+	result, err := findFlowSteps(webOutputDir)
 	require.NoError(t, err)
 
 	assert.Empty(t, result.Warnings)
@@ -261,6 +274,56 @@ func TestFindFlowSteps_ReadsEveryFlowFolder(t *testing.T) {
 	assert.Len(t, result.Steps["passing-flow"], 5)
 	assert.Len(t, result.Steps["subflow-fails"], 7)
 	assert.Len(t, result.Steps["repeat-retry"], 9)
+}
+
+func TestReadFlowSteps_OnIOSAndAndroid(t *testing.T) {
+	tests := []struct {
+		platform   string
+		outputDir  string
+		appID      string
+		screenshot string
+	}{
+		{platform: "ios", outputDir: iosOutputDir, appID: "org.wikimedia.wikipedia", screenshot: "wikipedia-launch"},
+		{platform: "android", outputDir: androidOutputDir, appID: "com.ivanovsky.passnotes.automation", screenshot: "keepassvault-launch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.platform, func(t *testing.T) {
+			passing, err := readFlowSteps(fixtureFlowDir(t, tt.outputDir, "fixture-passing"))
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"Define variables",
+				"Apply configuration",
+				fmt.Sprintf("Launch app %q", tt.appID),
+				"Wait for animation to end",
+				"Take screenshot " + tt.screenshot,
+			}, stepNames(passing))
+			assert.Equal(t, []string{"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED"}, stepStatuses(passing))
+
+			failing, err := readFlowSteps(fixtureFlowDir(t, tt.outputDir, "fixture-failing"))
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"Define variables",
+				"Apply configuration",
+				"Run helpers/launch.yaml",
+				"Apply configuration",
+				fmt.Sprintf("Launch app %q", tt.appID),
+				"Wait for animation to end",
+				`Tap on (Optional) "Button that does not exist"`,
+				`Assert that "Text that is not on the screen" is visible`,
+			}, stepNames(failing), "the subflow has its own Apply configuration, and nothing follows the failed step")
+			assert.Equal(t, []string{
+				"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "WARNED", "FAILED",
+			}, stepStatuses(failing))
+			assert.Equal(t, []int{0, 0, 0, 1, 1, 1, 0, 0}, stepDepths(failing))
+			assert.Equal(t, `Assertion is false: "Text that is not on the screen" is visible`, failing[7].Message)
+			assert.NotEmpty(t, failing[7].Details)
+
+			result, err := findFlowSteps(tt.outputDir)
+			require.NoError(t, err)
+			assert.Empty(t, result.Warnings)
+			assert.Len(t, result.Steps, 2)
+		})
+	}
 }
 
 func TestFindFlowSteps_WarnsAboutFlowsItCannotRead(t *testing.T) {
@@ -341,9 +404,9 @@ func formatClock(ms int64) string {
 	return fmt.Sprintf("%02d:%02d:%02d.%03d", ms/hourMs, ms/60000%60, ms/1000%60, ms%1000)
 }
 
-func fixtureFlowDir(t *testing.T, flow string) string {
+func fixtureFlowDir(t *testing.T, outputDir, flow string) string {
 	t.Helper()
-	flowDirs, err := filepath.Glob(filepath.Join(fixtureOutputDir, "*", flow))
+	flowDirs, err := filepath.Glob(filepath.Join(outputDir, "*", flow))
 	require.NoError(t, err)
 	require.Len(t, flowDirs, 1)
 	return flowDirs[0]
