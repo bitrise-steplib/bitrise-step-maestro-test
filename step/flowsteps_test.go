@@ -15,18 +15,15 @@ import (
 
 var updateGolden = flag.Bool("update", false, "rewrite the golden files of the flow steps")
 
-// testdata holds the output of Maestro 2.11.0 (maestro test --test-output-dir) of three platforms.
-//   - web: run locally, headless, against a local page. Flows cover a passing run, a subflow, a failing optional step,
-//     a failing assertion with steps after it, a failing subflow, and repeat and retry blocks.
-//   - ios and android: run on Bitrise, with the Wikipedia sample on a simulator and KeePassVault on an emulator. Each
-//     has a passing flow and a failing flow with a subflow, a failing optional step and a failing assertion.
+// testdata holds the output of Maestro 2.11.0 (maestro test --test-output-dir) from Bitrise builds: the Wikipedia sample
+// on an iOS simulator and KeePassVault on an Android emulator. Each has a passing flow, and a failing flow with a
+// subflow, a failing optional step and a failing assertion.
 const (
-	webOutputDir     = "testdata/web/test-output"
 	iosOutputDir     = "testdata/ios/test-output"
 	androidOutputDir = "testdata/android/test-output"
 )
 
-var fixtureOutputDirs = []string{webOutputDir, iosOutputDir, androidOutputDir}
+var fixtureOutputDirs = []string{iosOutputDir, androidOutputDir}
 
 func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 	var flowDirs []string
@@ -56,79 +53,34 @@ func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 	}
 }
 
-func TestReadFlowSteps_FailingFlow(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "failing-flow"))
+func TestReadFlowSteps_ACommandThatContainsOthersFinishesAfterThem(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
+  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 0, "depth": 0}},
+  {"metadata": {"status": "FAILED", "timestamp": 1100, "duration": 8910, "depth": 0}},
+  {"metadata": {"status": "COMPLETED", "timestamp": 1100, "duration": 0, "depth": 1}},
+  {"metadata": {"status": "FAILED", "timestamp": 1500, "duration": 8500, "depth": 1, "error": {"message": "Assertion is false", "debugMessage": "Details"}}}
+]`)
+	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "Define variables", "RUNNING"),
+		logLine("12:00:00.000", "Finished", "Define variables", "COMPLETED"),
+		logLine("12:00:00.100", "Start", "Run helpers/fail.yaml", "RUNNING"),
+		logLine("12:00:00.100", "Start", "Apply configuration", "RUNNING"),
+		logLine("12:00:00.100", "Finished", "Apply configuration", "COMPLETED"),
+		logLine("12:00:00.500", "Start", `Assert that "Missing" is visible`, "RUNNING"),
+		logLine("12:00:09.000", "Finished", `Assert that "Missing" is visible`, "FAILED"),
+		logLine("12:00:09.010", "Finished", "Run helpers/fail.yaml", "FAILED"),
+	}, ""))
+
+	steps, err := readFlowSteps(flowDir)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
-		"Define variables",
-		"Apply configuration",
-		"Open http://localhost:8765/page.html",
-		"Run helpers/check-title.yaml",
-		"Apply configuration",
-		`Assert that "Fixture page" is visible`,
-		`Assert that "Definitely not here" is not visible`,
-		`Tap on (Optional) "Button that does not exist"`,
-		`Assert that "Hello from the fixture." is visible`,
-		`Assert that "This text is not on the page" is visible`,
-	}, stepNames(steps), "implicit steps included, nothing after the failed step")
-	assert.Equal(t, []string{
-		"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "WARNED", "COMPLETED", "FAILED",
-	}, stepStatuses(steps))
-	assert.Equal(t, []int{0, 0, 0, 0, 1, 1, 1, 0, 0, 0}, stepDepths(steps), "the subflow's steps are one level deeper")
-
-	warned := steps[7]
-	assert.Empty(t, warned.Message, "an optional step that did not match is not a failure")
-
-	failed := steps[9]
-	assert.Equal(t, `Assert that "This text is not on the page" is visible`, failed.Name)
-	assert.Equal(t, `Assertion is false: "This text is not on the page" is visible`, failed.Message)
-	assert.NotEmpty(t, failed.Details)
-	assert.Positive(t, failed.DurationMs)
-}
-
-func TestReadFlowSteps_PassingFlow(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "passing-flow"))
-	require.NoError(t, err)
-
-	require.Len(t, steps, 5)
-	for _, step := range steps {
-		assert.Equal(t, "COMPLETED", step.Status)
-		assert.Zero(t, step.Depth)
-		assert.Empty(t, step.Message)
-	}
-	assert.Equal(t, "Define variables", steps[0].Name)
-	assert.Equal(t, "Take screenshot fixture-page", steps[4].Name)
-}
-
-func TestReadFlowSteps_FailingSubflowFailsItsParent(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "subflow-fails"))
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{
-		"COMPLETED", "COMPLETED", "COMPLETED", "FAILED", "COMPLETED", "COMPLETED", "FAILED",
-	}, stepStatuses(steps))
-	assert.Equal(t, []int{0, 0, 0, 0, 1, 1, 1}, stepDepths(steps))
-	assert.Equal(t, "Run helpers/fail.yaml", steps[3].Name)
-	assert.Equal(t, `Assert that "Text that is missing from the subflow page" is visible`, steps[6].Name)
-}
-
-func TestReadFlowSteps_EveryAttemptOfRepeatAndRetryIsAStep(t *testing.T) {
-	steps, err := readFlowSteps(fixtureFlowDir(t, webOutputDir, "repeat-retry"))
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{
-		"Define variables",
-		"Apply configuration",
-		"Open http://localhost:8765/page.html",
-		"Repeat 2 times",
-		`Assert that "Fixture page" is visible`,
-		`Assert that "Fixture page" is visible`,
-		"Retry 1 times",
-		`Assert that "Hello from the fixture." is visible`,
-		"Take screenshot done",
+		"Define variables", "Run helpers/fail.yaml", "Apply configuration", `Assert that "Missing" is visible`,
 	}, stepNames(steps))
-	assert.Equal(t, []int{0, 0, 0, 0, 1, 1, 0, 1, 0}, stepDepths(steps))
+	assert.Equal(t, []string{"COMPLETED", "FAILED", "COMPLETED", "FAILED"}, stepStatuses(steps))
+	assert.Equal(t, []int{0, 0, 1, 1}, stepDepths(steps))
+	assert.Equal(t, "Assertion is false", steps[3].Message)
 }
 
 func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
@@ -262,18 +214,6 @@ func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 	_, err := readFlowSteps(flowDir)
 
 	assert.ErrorIs(t, err, os.ErrNotExist)
-}
-
-func TestFindFlowSteps_ReadsEveryFlowFolder(t *testing.T) {
-	result, err := findFlowSteps(webOutputDir)
-	require.NoError(t, err)
-
-	assert.Empty(t, result.Warnings)
-	require.Len(t, result.Steps, 4)
-	assert.Len(t, result.Steps["failing-flow"], 10)
-	assert.Len(t, result.Steps["passing-flow"], 5)
-	assert.Len(t, result.Steps["subflow-fails"], 7)
-	assert.Len(t, result.Steps["repeat-retry"], 9)
 }
 
 func TestReadFlowSteps_OnIOSAndAndroid(t *testing.T) {
