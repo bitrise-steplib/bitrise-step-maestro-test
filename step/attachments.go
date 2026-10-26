@@ -39,7 +39,8 @@ type artifactManifest struct {
 	} `json:"entries"`
 }
 
-// flowBundle is one flow's Maestro output folder and the attachable files in it, relative to the folder.
+// flowBundle is one flow's Maestro output folder and the attachable files in it, relative to the folder. The files
+// can be empty, the folder still has the flow's commands.
 type flowBundle struct {
 	Dir   string
 	Files []string
@@ -48,7 +49,7 @@ type flowBundle struct {
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
-// keyed by folder name.
+// keyed by folder name. A folder without attachable files is included too, because its flow still gets a step list.
 func findFlowBundles(testOutputDir, attemptDir string) (map[string]flowBundle, error) {
 	manifests, err := filepath.Glob(filepath.Join(testOutputDir, "*", "*", manifestFileName))
 	if err != nil {
@@ -62,9 +63,7 @@ func findFlowBundles(testOutputDir, attemptDir string) (map[string]flowBundle, e
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 		}
-		if len(files) > 0 {
-			bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files, AttemptDir: attemptDir}
-		}
+		bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files, AttemptDir: attemptDir}
 	}
 	return bundles, nil
 }
@@ -117,12 +116,14 @@ func attachableFiles(flowDir string) ([]string, error) {
 
 type attachmentLinkResult struct {
 	// Linked maps the folder a bundle's files are exported to, relative to the report, to the bundle.
-	Linked   map[string]flowBundle
-	Warnings []string
+	Linked map[string]flowBundle
+	// TestCases maps the same folders to their test cases.
+	TestCases map[string]*testreport.TestCase
+	Warnings  []string
 }
 
-// linkAttachments adds an attachment_N property per bundle file to the test case of the flow. The value
-// is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
+// linkAttachments matches each flow folder to its test case, and adds an attachment_N property per bundle file to it.
+// The value is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
 func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle) attachmentLinkResult {
 	testCasesByFolder := map[string][]*testreport.TestCase{}
 	forEachTestCase(report, func(testCase *testreport.TestCase) {
@@ -130,7 +131,7 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		testCasesByFolder[folder] = append(testCasesByFolder[folder], testCase)
 	})
 
-	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
+	result := attachmentLinkResult{Linked: map[string]flowBundle{}, TestCases: map[string]*testreport.TestCase{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
 		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[prefix][0].Name, folder))
@@ -151,6 +152,7 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		exportDir := path.Join(bundle.AttemptDir, folder)
 		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
 		result.Linked[exportDir] = bundle
+		result.TestCases[exportDir] = testCases[0]
 	}
 	return result
 }

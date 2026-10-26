@@ -80,10 +80,19 @@ step_bundles:
         - content: |-
             #!/usr/bin/env bash
             set -euxo pipefail
-            cat > "$SAMPLES_DIR/failing-flow.yaml" <<'EOF'
+            mkdir -p "$SAMPLES_DIR/helpers"
+            cat > "$SAMPLES_DIR/helpers/launch.yaml" <<'EOF'
             appId: org.wikipedia
             ---
             - launchApp
+            EOF
+            cat > "$SAMPLES_DIR/failing-flow.yaml" <<'EOF'
+            appId: org.wikipedia
+            ---
+            - runFlow: helpers/launch.yaml
+            - tapOn:
+                text: "This button is never on screen"
+                optional: true
             - assertVisible: "This text is never on screen"
             EOF
     - path::./:
@@ -102,6 +111,13 @@ step_bundles:
             set -euxo pipefail
             grep -q "<failure" "$MAESTRO_JUNIT_PATH"
             find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
+            test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
+            report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            grep -q '<system-out>' "$report"
+            grep -q '^ *✓ Run helpers/launch.yaml' "$report"
+            grep -q '^   *✓ Launch app' "$report"
+            grep -q '^ *⚠ Tap on (Optional)' "$report"
+            grep -q '^ *✗ Assert that "This text is never on screen" is visible' "$report"
     - bundle::verify_outputs: {}
     - bundle::stop_android_emulator: {}
 
