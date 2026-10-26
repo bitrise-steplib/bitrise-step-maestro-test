@@ -19,7 +19,10 @@ const (
 	startTimeToleranceMs = 250
 )
 
-var commandLogLine = regexp.MustCompile(`^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) .*onCommand(Start|Finished): (.+) (RUNNING|PENDING|COMPLETED|FAILED|WARNED|SKIPPED)$`)
+var (
+	logEntryStart  = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3} `)
+	commandLogLine = regexp.MustCompile(`(?s)^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) .*?onCommand(Start|Finished): (.+) (RUNNING|PENDING|COMPLETED|FAILED|WARNED|SKIPPED)$`)
+)
 
 // flowStep is one command Maestro ran in a flow, in the order it ran.
 type flowStep struct {
@@ -124,22 +127,19 @@ func checkSameCommands(logged []loggedCommand, records []commandRecord) error {
 // readLoggedCommands lists the commands in the order they started. A command that contains others, such as a
 // subflow, finishes after them, so each "finished" line belongs to the innermost command still running.
 func readLoggedCommands(logPath string) ([]loggedCommand, error) {
-	file, err := os.Open(logPath)
+	entries, err := readCommandLogEntries(logPath)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close() //nolint:errcheck
 
 	var commands []loggedCommand
 	var running []int
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-	for scanner.Scan() {
-		match := commandLogLine.FindStringSubmatch(strings.TrimRight(scanner.Text(), "\r"))
+	for _, entry := range entries {
+		match := commandLogLine.FindStringSubmatch(entry)
 		if match == nil {
 			continue
 		}
-		name, status := match[6], match[7]
+		name, status := strings.TrimRight(match[6], "\n"), match[7]
 
 		if match[5] == "Start" {
 			if status == "RUNNING" {
@@ -159,10 +159,39 @@ func readLoggedCommands(logPath string) ([]loggedCommand, error) {
 		}
 		commands[last].status = status
 	}
+	return commands, nil
+}
+
+// readCommandLogEntries returns the entries of the log that report a command starting or finishing. An entry starts
+// with a time of day and goes on over the lines that do not, as the text of a command does when it has several lines.
+func readCommandLogEntries(logPath string) ([]string, error) {
+	file, err := os.Open(logPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close() //nolint:errcheck
+
+	var entries []string
+	inCommandEntry := false
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if logEntryStart.MatchString(line) {
+			inCommandEntry = strings.Contains(line, "onCommandStart: ") || strings.Contains(line, "onCommandFinished: ")
+			if inCommandEntry {
+				entries = append(entries, line)
+			}
+			continue
+		}
+		if inCommandEntry {
+			entries[len(entries)-1] += "\n" + line
+		}
+	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read %s: %w", maestroLogPath, err)
 	}
-	return commands, nil
+	return entries, nil
 }
 
 func timeOfDayMs(hours, minutes, seconds, millis string) int64 {

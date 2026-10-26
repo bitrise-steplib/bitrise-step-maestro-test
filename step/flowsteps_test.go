@@ -88,6 +88,50 @@ func TestReadFlowSteps_ACommandThatContainsOthersFinishesAfterThem(t *testing.T)
 	assert.Equal(t, "Assertion is false", steps[3].Message)
 }
 
+func TestReadFlowSteps_ACommandTextCanSpanSeveralLines(t *testing.T) {
+	// The shape Maestro 2.11.0 logs for an evalScript with a multi-line script: only the first line starts with a time,
+	// and the status follows the script's last newline.
+	script := "Run ${\n  output.first = 1;\n  output.second = 2;\n}\n"
+	flowDir := t.TempDir()
+	writeFlowFiles(t, flowDir, 12*hourMs,
+		testCommand{name: "Define variables", status: "COMPLETED"},
+		testCommand{name: script, status: "COMPLETED", atMs: 1000},
+		testCommand{name: `Assert that "Fixture page" is visible`, status: "COMPLETED", atMs: 1500},
+	)
+
+	steps, err := readFlowSteps(flowDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"Define variables",
+		"Run ${\n  output.first = 1;\n  output.second = 2;\n}",
+		`Assert that "Fixture page" is visible`,
+	}, stepNames(steps))
+	assert.Equal(t, []string{"COMPLETED", "COMPLETED", "COMPLETED"}, stepStatuses(steps))
+}
+
+func TestReadFlowSteps_LinesOfOtherLogEntriesDoNotChangeTheNames(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
+  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 0, "depth": 0}},
+  {"metadata": {"status": "FAILED", "timestamp": 1100, "duration": 900, "depth": 0}}
+]`)
+	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "Define variables", "RUNNING"),
+		logLine("12:00:00.000", "Finished", "Define variables", "COMPLETED"),
+		logLine("12:00:00.100", "Start", "Tap on id: button", "RUNNING"),
+		"12:00:00.900 [ERROR] maestro.orchestra.Orchestra.executeCommands: CommandFailed: Element not found\n" +
+			"maestro.MaestroException$ElementNotFound: Element not found\n" +
+			"\tat maestro.Maestro.tap(Maestro.kt:1)\n",
+		logLine("12:00:01.000", "Finished", "Tap on id: button", "FAILED"),
+	}, ""))
+
+	steps, err := readFlowSteps(flowDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Define variables", "Tap on id: button"}, stepNames(steps))
+}
+
 func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFlowFiles(t, flowDir, 12*hourMs, testCommand{
