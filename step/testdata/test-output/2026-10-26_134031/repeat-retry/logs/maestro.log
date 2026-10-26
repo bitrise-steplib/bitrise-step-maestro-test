@@ -1,0 +1,23 @@
+13:40:32.504 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+13:40:32.505 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+13:40:32.506 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:40:32.506 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:40:32.506 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Open http://localhost:8765/page.html RUNNING
+13:40:32.506 [ INFO] maestro.Maestro.openLink: Opening link http://localhost:8765/page.html for app: http://localhost:8765/page.html with autoVerify config as false
+13:40:32.771 [ INFO] maestro.drivers.CdpWebDriver.detectWindowChange: Detected a window change, switching to new window handle 81CE186A44DEAFA4A1C2804B01D7ED83
+13:40:33.254 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Open http://localhost:8765/page.html COMPLETED
+13:40:33.254 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Repeat 2 times RUNNING
+13:40:33.255 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Fixture page" is visible RUNNING
+13:40:33.624 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Fixture page" is visible COMPLETED
+13:40:33.624 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandReset: Assert that "Fixture page" is visible PENDING
+13:40:33.624 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Fixture page" is visible RUNNING
+13:40:33.984 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Fixture page" is visible COMPLETED
+13:40:33.985 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Repeat 2 times COMPLETED
+13:40:33.985 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Retry 1 times RUNNING
+13:40:33.986 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Hello from the fixture." is visible RUNNING
+13:40:34.334 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Hello from the fixture." is visible COMPLETED
+13:40:34.334 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Retry 1 times COMPLETED
+13:40:34.334 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Take screenshot done RUNNING
+13:40:34.335 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:40:34.336 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:40:34.355 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Take screenshot done COMPLETED

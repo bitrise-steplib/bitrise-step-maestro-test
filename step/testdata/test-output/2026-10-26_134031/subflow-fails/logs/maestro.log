@@ -1,0 +1,20 @@
+13:40:34.540 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+13:40:34.541 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+13:40:34.541 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:40:34.541 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:40:34.541 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Open http://localhost:8765/page.html RUNNING
+13:40:34.541 [ INFO] maestro.Maestro.openLink: Opening link http://localhost:8765/page.html for app: http://localhost:8765/page.html with autoVerify config as false
+13:40:35.263 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Open http://localhost:8765/page.html COMPLETED
+13:40:35.264 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Run helpers/fail.yaml RUNNING
+13:40:35.264 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:40:35.264 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:40:35.264 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Fixture page" is visible RUNNING
+13:40:35.625 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Fixture page" is visible COMPLETED
+13:40:35.625 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Text that is missing from the subflow page" is visible RUNNING
+13:40:53.386 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:40:53.386 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:40:53.408 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Text that is missing from the subflow page" is visible FAILED
+13:40:53.408 [ERROR] maestro.orchestra.Orchestra.executeCommands: [Command execution] CommandFailed: Assertion is false: "Text that is missing from the subflow page" is visible
+13:40:53.408 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:40:53.409 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:40:53.437 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Run helpers/fail.yaml FAILED

@@ -1,0 +1,14 @@
+11:43:06.617 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+11:43:06.618 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+11:43:06.618 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+11:43:06.618 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+11:43:06.619 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Open http://localhost:8765/page.html RUNNING
+11:43:06.619 [ INFO] maestro.Maestro.openLink: Opening link http://localhost:8765/page.html for app: http://localhost:8765/page.html with autoVerify config as false
+11:43:06.875 [ INFO] maestro.drivers.CdpWebDriver.detectWindowChange: Detected a window change, switching to new window handle 62874F59F5B309EB6B3E5DB3E84AEC4C
+11:43:07.370 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Open http://localhost:8765/page.html COMPLETED
+11:43:07.370 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Fixture page" is visible RUNNING
+11:43:07.732 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Fixture page" is visible COMPLETED
+11:43:07.732 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Take screenshot fixture-page RUNNING
+11:43:07.734 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+11:43:07.735 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+11:43:07.758 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Take screenshot fixture-page COMPLETED

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Define variables",
+    "status": "COMPLETED",
+    "durationMs": 2,
+    "depth": 0
+  },
+  {
+    "name": "Apply configuration",
+    "status": "COMPLETED",
+    "durationMs": 0,
+    "depth": 0
+  },
+  {
+    "name": "Open http://localhost:8765/page.html",
+    "status": "COMPLETED",
+    "durationMs": 751,
+    "depth": 0
+  },
+  {
+    "name": "Assert that \"Fixture page\" is visible",
+    "status": "COMPLETED",
+    "durationMs": 362,
+    "depth": 0
+  },
+  {
+    "name": "Take screenshot fixture-page",
+    "status": "COMPLETED",
+    "durationMs": 26,
+    "depth": 0
+  }
+]
