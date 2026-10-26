@@ -275,37 +275,6 @@ func TestReadFlowSteps_FailingFlow(t *testing.T) {
 	}
 }
 
-func TestFindFlowSteps_ReadsEveryFlowFolder(t *testing.T) {
-	for _, fixture := range mobileFixtures {
-		t.Run(fixture.platform, func(t *testing.T) {
-			result, err := findFlowSteps(fixture.outputDir)
-			require.NoError(t, err)
-
-			assert.Empty(t, result.Warnings)
-			require.Len(t, result.Steps, 2)
-			assert.Len(t, result.Steps["fixture-passing"], 5)
-			assert.Len(t, result.Steps["fixture-failing"], 8)
-		})
-	}
-}
-
-func TestFindFlowSteps_WarnsAboutFlowsItCannotRead(t *testing.T) {
-	runDir := filepath.Join(t.TempDir(), "2026-10-26_114305")
-	command := testCommand{name: "Define variables", status: "COMPLETED"}
-
-	writeFlowFiles(t, filepath.Join(runDir, "Flow A"), 12*hourMs, command)
-	writeFlowFiles(t, filepath.Join(runDir, "Flow B"), 12*hourMs, command, testCommand{name: "Apply configuration", status: "COMPLETED", skipInLog: true})
-	writeFile(t, filepath.Join(runDir, "Flow C", "logs", "maestro.log"), logLine("12:00:00.000", "Start", "Define variables", "RUNNING"))
-
-	result, err := findFlowSteps(filepath.Dir(runDir))
-	require.NoError(t, err)
-
-	assert.Len(t, result.Steps, 1)
-	assert.Contains(t, result.Steps, "Flow A")
-	require.Len(t, result.Warnings, 1, "a folder without commands.json is skipped silently")
-	assert.Contains(t, result.Warnings[0], `"Flow B"`)
-}
-
 const (
 	hourMs = 60 * 60 * 1000
 	// epochBaseMs is unrelated to the log's clock, as in a real run, where the log has only the time of day.

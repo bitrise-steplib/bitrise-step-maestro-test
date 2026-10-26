@@ -56,37 +56,6 @@ type loggedCommand struct {
 	status string
 }
 
-type flowStepsResult struct {
-	// Steps maps a flow folder name to the steps of that flow.
-	Steps    map[string][]flowStep
-	Warnings []string
-}
-
-// findFlowSteps reads the steps of every flow folder Maestro wrote under <test-output-dir>/<timestamp>/<flow>/.
-// A flow whose steps cannot be read is left out with a warning.
-func findFlowSteps(testOutputDir string) (flowStepsResult, error) {
-	commandFiles, err := filepath.Glob(filepath.Join(testOutputDir, "*", "*", commandsFileName))
-	if err != nil {
-		return flowStepsResult{}, err
-	}
-
-	result := flowStepsResult{Steps: map[string][]flowStep{}}
-	for _, commandFile := range commandFiles {
-		flowDir := filepath.Dir(commandFile)
-		folder := filepath.Base(flowDir)
-
-		steps, err := readFlowSteps(flowDir)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("steps of Maestro output folder %q are not listed: %s", folder, err))
-			continue
-		}
-		if len(steps) > 0 {
-			result.Steps[folder] = steps
-		}
-	}
-	return result, nil
-}
-
 // readFlowSteps takes the result, duration, depth and failure of each step from commands.json, and its name from
 // maestro.log. Both list every command that started, in order, so the n-th log entry is the n-th record. The steps
 // are returned only when the two files agree on every command, because a wrong name is worse than no list.
