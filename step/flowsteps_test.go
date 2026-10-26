@@ -15,20 +15,25 @@ import (
 
 var updateGolden = flag.Bool("update", false, "rewrite the golden files of the flow steps")
 
-// testdata holds the output of Maestro 2.11.0 (maestro test --test-output-dir) from Bitrise builds: the Wikipedia sample
-// on an iOS simulator and KeePassVault on an Android emulator. Each has a passing flow, and a failing flow with a
-// subflow, a failing optional step and a failing assertion.
-const (
-	iosOutputDir     = "testdata/ios/test-output"
-	androidOutputDir = "testdata/android/test-output"
-)
+type mobileFixture struct {
+	platform   string
+	outputDir  string
+	appID      string
+	screenshot string
+}
 
-var fixtureOutputDirs = []string{iosOutputDir, androidOutputDir}
+// mobileFixtures is the output of Maestro 2.11.0 (maestro test --test-output-dir) from Bitrise builds: the Wikipedia
+// sample on an iOS simulator and KeePassVault on an Android emulator. Each has a passing flow, and a failing flow with
+// a subflow, a failing optional step and a failing assertion.
+var mobileFixtures = []mobileFixture{
+	{platform: "ios", outputDir: "testdata/ios/test-output", appID: "org.wikimedia.wikipedia", screenshot: "wikipedia-launch"},
+	{platform: "android", outputDir: "testdata/android/test-output", appID: "com.ivanovsky.passnotes.automation", screenshot: "keepassvault-launch"},
+}
 
 func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 	var flowDirs []string
-	for _, outputDir := range fixtureOutputDirs {
-		dirs, err := filepath.Glob(filepath.Join(outputDir, "*", "*"))
+	for _, fixture := range mobileFixtures {
+		dirs, err := filepath.Glob(filepath.Join(fixture.outputDir, "*", "*"))
 		require.NoError(t, err)
 		require.NotEmpty(t, dirs)
 		flowDirs = append(flowDirs, dirs...)
@@ -216,52 +221,70 @@ func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestReadFlowSteps_OnIOSAndAndroid(t *testing.T) {
-	tests := []struct {
-		platform   string
-		outputDir  string
-		appID      string
-		screenshot string
-	}{
-		{platform: "ios", outputDir: iosOutputDir, appID: "org.wikimedia.wikipedia", screenshot: "wikipedia-launch"},
-		{platform: "android", outputDir: androidOutputDir, appID: "com.ivanovsky.passnotes.automation", screenshot: "keepassvault-launch"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.platform, func(t *testing.T) {
-			passing, err := readFlowSteps(fixtureFlowDir(t, tt.outputDir, "fixture-passing"))
+func TestReadFlowSteps_PassingFlow(t *testing.T) {
+	for _, fixture := range mobileFixtures {
+		t.Run(fixture.platform, func(t *testing.T) {
+			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-passing"))
 			require.NoError(t, err)
+
 			assert.Equal(t, []string{
 				"Define variables",
 				"Apply configuration",
-				fmt.Sprintf("Launch app %q", tt.appID),
+				fmt.Sprintf("Launch app %q", fixture.appID),
 				"Wait for animation to end",
-				"Take screenshot " + tt.screenshot,
-			}, stepNames(passing))
-			assert.Equal(t, []string{"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED"}, stepStatuses(passing))
+				"Take screenshot " + fixture.screenshot,
+			}, stepNames(steps), "implicit steps included")
+			assert.Equal(t, []string{"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED"}, stepStatuses(steps))
+			assert.Equal(t, []int{0, 0, 0, 0, 0}, stepDepths(steps))
+			for _, step := range steps {
+				assert.Empty(t, step.Message)
+			}
+		})
+	}
+}
 
-			failing, err := readFlowSteps(fixtureFlowDir(t, tt.outputDir, "fixture-failing"))
+func TestReadFlowSteps_FailingFlow(t *testing.T) {
+	for _, fixture := range mobileFixtures {
+		t.Run(fixture.platform, func(t *testing.T) {
+			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-failing"))
 			require.NoError(t, err)
+
 			assert.Equal(t, []string{
 				"Define variables",
 				"Apply configuration",
 				"Run helpers/launch.yaml",
 				"Apply configuration",
-				fmt.Sprintf("Launch app %q", tt.appID),
+				fmt.Sprintf("Launch app %q", fixture.appID),
 				"Wait for animation to end",
 				`Tap on (Optional) "Button that does not exist"`,
 				`Assert that "Text that is not on the screen" is visible`,
-			}, stepNames(failing), "the subflow has its own Apply configuration, and nothing follows the failed step")
+			}, stepNames(steps), "the subflow has its own Apply configuration, and nothing follows the failed step")
 			assert.Equal(t, []string{
 				"COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "WARNED", "FAILED",
-			}, stepStatuses(failing))
-			assert.Equal(t, []int{0, 0, 0, 1, 1, 1, 0, 0}, stepDepths(failing))
-			assert.Equal(t, `Assertion is false: "Text that is not on the screen" is visible`, failing[7].Message)
-			assert.NotEmpty(t, failing[7].Details)
+			}, stepStatuses(steps))
+			assert.Equal(t, []int{0, 0, 0, 1, 1, 1, 0, 0}, stepDepths(steps), "the subflow's steps are one level deeper")
 
-			result, err := findFlowSteps(tt.outputDir)
+			warned := steps[6]
+			assert.Empty(t, warned.Message, "an optional step that did not match is not a failure")
+
+			failed := steps[7]
+			assert.Equal(t, `Assertion is false: "Text that is not on the screen" is visible`, failed.Message)
+			assert.NotEmpty(t, failed.Details)
+			assert.Positive(t, failed.DurationMs)
+		})
+	}
+}
+
+func TestFindFlowSteps_ReadsEveryFlowFolder(t *testing.T) {
+	for _, fixture := range mobileFixtures {
+		t.Run(fixture.platform, func(t *testing.T) {
+			result, err := findFlowSteps(fixture.outputDir)
 			require.NoError(t, err)
+
 			assert.Empty(t, result.Warnings)
-			assert.Len(t, result.Steps, 2)
+			require.Len(t, result.Steps, 2)
+			assert.Len(t, result.Steps["fixture-passing"], 5)
+			assert.Len(t, result.Steps["fixture-failing"], 8)
 		})
 	}
 }
