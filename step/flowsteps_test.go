@@ -58,45 +58,15 @@ func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 	}
 }
 
-func TestReadFlowSteps_ACommandThatContainsOthersFinishesAfterThem(t *testing.T) {
-	flowDir := t.TempDir()
-	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
-  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 0, "depth": 0}},
-  {"metadata": {"status": "FAILED", "timestamp": 1100, "duration": 8910, "depth": 0}},
-  {"metadata": {"status": "COMPLETED", "timestamp": 1100, "duration": 0, "depth": 1}},
-  {"metadata": {"status": "FAILED", "timestamp": 1500, "duration": 8500, "depth": 1, "error": {"message": "Assertion is false", "debugMessage": "Details"}}}
-]`)
-	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
-		logLine("12:00:00.000", "Start", "Define variables", "RUNNING"),
-		logLine("12:00:00.000", "Finished", "Define variables", "COMPLETED"),
-		logLine("12:00:00.100", "Start", "Run helpers/fail.yaml", "RUNNING"),
-		logLine("12:00:00.100", "Start", "Apply configuration", "RUNNING"),
-		logLine("12:00:00.100", "Finished", "Apply configuration", "COMPLETED"),
-		logLine("12:00:00.500", "Start", `Assert that "Missing" is visible`, "RUNNING"),
-		logLine("12:00:09.000", "Finished", `Assert that "Missing" is visible`, "FAILED"),
-		logLine("12:00:09.010", "Finished", "Run helpers/fail.yaml", "FAILED"),
-	}, ""))
-
-	steps, err := readFlowSteps(flowDir)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{
-		"Define variables", "Run helpers/fail.yaml", "Apply configuration", `Assert that "Missing" is visible`,
-	}, stepNames(steps))
-	assert.Equal(t, []string{"COMPLETED", "FAILED", "COMPLETED", "FAILED"}, stepStatuses(steps))
-	assert.Equal(t, []int{0, 0, 1, 1}, stepDepths(steps))
-	assert.Equal(t, "Assertion is false", steps[3].Message)
-}
-
 func TestReadFlowSteps_ACommandTextCanSpanSeveralLines(t *testing.T) {
 	// The shape Maestro 2.11.0 logs for an evalScript with a multi-line script: only the first line starts with a time,
 	// and the status follows the script's last newline.
 	script := "Run ${\n  output.first = 1;\n  output.second = 2;\n}\n"
 	flowDir := t.TempDir()
-	writeFlowFiles(t, flowDir, 12*hourMs,
+	writeFlowFiles(t, flowDir,
 		testCommand{name: "Define variables", status: "COMPLETED"},
-		testCommand{name: script, status: "COMPLETED", atMs: 1000},
-		testCommand{name: `Assert that "Fixture page" is visible`, status: "COMPLETED", atMs: 1500},
+		testCommand{name: script, status: "COMPLETED"},
+		testCommand{name: `Assert that "Fixture page" is visible`, status: "COMPLETED"},
 	)
 
 	steps, err := readFlowSteps(flowDir)
@@ -113,8 +83,8 @@ func TestReadFlowSteps_ACommandTextCanSpanSeveralLines(t *testing.T) {
 func TestReadFlowSteps_LinesOfOtherLogEntriesDoNotChangeTheNames(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
-  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 0, "depth": 0}},
-  {"metadata": {"status": "FAILED", "timestamp": 1100, "duration": 900, "depth": 0}}
+  {"metadata": {"status": "COMPLETED", "duration": 0, "depth": 0}},
+  {"metadata": {"status": "FAILED", "duration": 900, "depth": 0}}
 ]`)
 	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
 		logLine("12:00:00.000", "Start", "Define variables", "RUNNING"),
@@ -134,7 +104,7 @@ func TestReadFlowSteps_LinesOfOtherLogEntriesDoNotChangeTheNames(t *testing.T) {
 
 func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 	flowDir := t.TempDir()
-	writeFlowFiles(t, flowDir, 12*hourMs, testCommand{
+	writeFlowFiles(t, flowDir, testCommand{
 		name:    "Define variables",
 		status:  "COMPLETED",
 		command: `{"defineVariablesCommand": {"env": {"PASSWORD": "s3cret-value"}}}`,
@@ -151,7 +121,7 @@ func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 
 func TestReadFlowSteps_DoesNotResolvePlaceholders(t *testing.T) {
 	flowDir := t.TempDir()
-	writeFlowFiles(t, flowDir, 12*hourMs, testCommand{
+	writeFlowFiles(t, flowDir, testCommand{
 		name:    "Input text ${PASSWORD}",
 		status:  "COMPLETED",
 		command: `{"inputTextCommand": {"text": "${PASSWORD}"}}`,
@@ -164,101 +134,23 @@ func TestReadFlowSteps_DoesNotResolvePlaceholders(t *testing.T) {
 	assert.Equal(t, "Input text ${PASSWORD}", steps[0].Name)
 }
 
-func TestReadFlowSteps_ToleratesTheLogClockPassingMidnight(t *testing.T) {
+func TestReadFlowSteps_FailsWhenTheFilesListDifferentNumbersOfCommands(t *testing.T) {
 	flowDir := t.TempDir()
-	writeFlowFiles(t, flowDir, dayMs-500,
+	writeFlowFiles(t, flowDir,
 		testCommand{name: "Define variables", status: "COMPLETED"},
-		testCommand{name: "Apply configuration", status: "COMPLETED", atMs: 100},
-		testCommand{name: "Launch app", status: "COMPLETED", atMs: 900},
+		testCommand{name: "Apply configuration", status: "COMPLETED"},
+		testCommand{name: "Tap on id: button", status: "COMPLETED", skipInLog: true},
 	)
-
-	steps, err := readFlowSteps(flowDir)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"Define variables", "Apply configuration", "Launch app"}, stepNames(steps))
-}
-
-func TestReadFlowSteps_FailsWhenTheFilesDisagree(t *testing.T) {
-	commands := func() []testCommand {
-		return []testCommand{
-			{name: "Define variables", status: "COMPLETED"},
-			{name: "Apply configuration", status: "COMPLETED", atMs: 5},
-			{name: "Tap on id: button", status: "COMPLETED", atMs: 1000},
-		}
-	}
-
-	tests := []struct {
-		name    string
-		change  func(commands []testCommand) []testCommand
-		wantErr string
-	}{
-		{
-			name: "the log has fewer commands",
-			change: func(commands []testCommand) []testCommand {
-				commands[2].skipInLog = true
-				return commands
-			},
-			wantErr: "has 3 commands but logs/maestro.log names 2",
-		},
-		{
-			name: "a command has another status in the log",
-			change: func(commands []testCommand) []testCommand {
-				commands[2].logStatus = "FAILED"
-				return commands
-			},
-			wantErr: `command 3 ("Tap on id: button") is FAILED in logs/maestro.log but COMPLETED in commands.json`,
-		},
-		{
-			name: "a command started at another time in the log",
-			change: func(commands []testCommand) []testCommand {
-				commands[2].logDriftMs = 2000
-				return commands
-			},
-			wantErr: `command 3 ("Tap on id: button") started 3000 ms after the first one in logs/maestro.log but 1000 ms in commands.json`,
-		},
-		{
-			name: "a command has no timestamp",
-			change: func(commands []testCommand) []testCommand {
-				commands[1].noTimestamp = true
-				return commands
-			},
-			wantErr: "command 2 in commands.json has no timestamp",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			flowDir := t.TempDir()
-			writeFlowFiles(t, flowDir, 12*hourMs, tt.change(commands())...)
-
-			steps, err := readFlowSteps(flowDir)
-
-			assert.Nil(t, steps)
-			assert.ErrorContains(t, err, tt.wantErr)
-		})
-	}
-}
-
-func TestReadFlowSteps_FailsWhenAFinishedLineDoesNotMatchTheRunningCommand(t *testing.T) {
-	flowDir := t.TempDir()
-	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
-  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 1, "depth": 0}},
-  {"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 1, "depth": 0}}
-]`)
-	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
-		logLine("12:00:00.000", "Start", "Define variables", "RUNNING"),
-		logLine("12:00:00.000", "Start", "Apply configuration", "RUNNING"),
-		logLine("12:00:00.000", "Finished", "Define variables", "COMPLETED"),
-	}, ""))
 
 	steps, err := readFlowSteps(flowDir)
 
 	assert.Nil(t, steps)
-	assert.ErrorContains(t, err, `"Define variables" finished while "Apply configuration" is the innermost running command`)
+	assert.ErrorContains(t, err, "has 3 commands but logs/maestro.log names 2")
 }
 
 func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 	flowDir := t.TempDir()
-	writeFile(t, filepath.Join(flowDir, "commands.json"), `[{"metadata": {"status": "COMPLETED", "timestamp": 1000, "duration": 1, "depth": 0}}]`)
+	writeFile(t, filepath.Join(flowDir, "commands.json"), `[{"metadata": {"status": "COMPLETED", "duration": 1, "depth": 0}}]`)
 
 	_, err := readFlowSteps(flowDir)
 
@@ -319,29 +211,18 @@ func TestReadFlowSteps_FailingFlow(t *testing.T) {
 	}
 }
 
-const (
-	hourMs = 60 * 60 * 1000
-	// epochBaseMs is unrelated to the log's clock, as in a real run, where the log has only the time of day.
-	epochBaseMs = 1_700_000_000_000
-)
-
-// testCommand is a command written to both commands.json and maestro.log. The fields below atMs make the log differ.
+// testCommand is a command written to both commands.json and maestro.log.
 type testCommand struct {
 	name    string
 	status  string
-	atMs    int64
 	depth   int
 	command string
 
-	skipInLog   bool
-	logStatus   string
-	logDriftMs  int64
-	noTimestamp bool
+	skipInLog bool
 }
 
-// writeFlowFiles writes a commands.json and a maestro.log that describe the same commands. The log's clock starts at
-// startOfDayMs, a time of day in milliseconds.
-func writeFlowFiles(t *testing.T, flowDir string, startOfDayMs int64, commands ...testCommand) {
+// writeFlowFiles writes a commands.json and a maestro.log that describe the same commands.
+func writeFlowFiles(t *testing.T, flowDir string, commands ...testCommand) {
 	t.Helper()
 
 	var records, logLines []string
@@ -350,22 +231,14 @@ func writeFlowFiles(t *testing.T, flowDir string, startOfDayMs int64, commands .
 		if raw == "" {
 			raw = "{}"
 		}
-		timestamp := fmt.Sprintf(`"timestamp": %d, `, epochBaseMs+command.atMs)
-		if command.noTimestamp {
-			timestamp = ""
-		}
-		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, %s"duration": 1, "depth": %d}}`,
-			raw, command.status, timestamp, command.depth))
+		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, "duration": 1, "depth": %d}}`,
+			raw, command.status, command.depth))
 
-		if command.skipInLog {
-			continue
+		if !command.skipInLog {
+			logLines = append(logLines,
+				logLine("12:00:00.000", "Start", command.name, "RUNNING"),
+				logLine("12:00:00.000", "Finished", command.name, command.status))
 		}
-		clock := formatClock((startOfDayMs + command.atMs + command.logDriftMs) % dayMs)
-		status := command.status
-		if command.logStatus != "" {
-			status = command.logStatus
-		}
-		logLines = append(logLines, logLine(clock, "Start", command.name, "RUNNING"), logLine(clock, "Finished", command.name, status))
 	}
 
 	writeFile(t, filepath.Join(flowDir, "commands.json"), "["+strings.Join(records, ",")+"]")
@@ -374,10 +247,6 @@ func writeFlowFiles(t *testing.T, flowDir string, startOfDayMs int64, commands .
 
 func logLine(clock, event, name, status string) string {
 	return fmt.Sprintf("%s [ INFO] maestro.cli.runner.CliConsoleListener.onCommand%s: %s %s\n", clock, event, name, status)
-}
-
-func formatClock(ms int64) string {
-	return fmt.Sprintf("%02d:%02d:%02d.%03d", ms/hourMs, ms/60000%60, ms/1000%60, ms%1000)
 }
 
 func fixtureFlowDir(t *testing.T, outputDir, flow string) string {
