@@ -89,7 +89,8 @@ func readFlowFile(pth, folder string) flowFile {
 }
 
 // quarantinedFlows returns the flows a quarantine entry names. The list holds the quarantined tests of every step
-// of the app, so most entries match no flow. The suite name is not compared, as it is the same for every Maestro run.
+// of the app, so most entries match no flow. The suite name is not compared: Maestro names it "Test Suite" unless
+// additional_args sets --test-suite-name.
 func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flowFile) []flowFile {
 	var matched []flowFile
 	for _, flow := range flows {
