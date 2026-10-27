@@ -164,7 +164,7 @@ step_bundles:
         - app_path: $SAMPLES_DIR/wikipedia.apk
         - flow_path: $SAMPLES_DIR
         - include_tags: android
-        - quarantined_tests: '[{"testCaseName":"android-advanced-flow","className":"android-advanced-flow","testSuiteName":["Test Suite"]}]'
+        - quarantined_tests: "[{\"testCaseName\":\"android-advanced-flow\",\"className\":\"android-advanced-flow\",\"testSuiteName\":[\"Test Suite\"]}]"
         - test_name: $TEST_NAME
     - bundle::verify_outputs: {}
     - bundle::verify_tag_filtering: {}

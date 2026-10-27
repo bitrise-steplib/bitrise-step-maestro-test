@@ -117,8 +117,10 @@ workflows:
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
+| `num_flaky_test_attempts` | How many times a failed flow runs again. A flow that passes on a retry is reported as flaky on the Test Reports page and does not fail the Step. The Step fails when a flow fails on every run.  Only the failed flows run again, with the same tags and arguments. The Test Reports page shows every run of a flow with its own screenshots and logs.  `0` turns retries off, the maximum is `10`. Rerunning a flow needs Maestro 2.6.0 or newer. Flows that the workspace config orders with `executionOrder` may not run again. | required | `0` |
 | `maestro_version` | The Maestro CLI version to install. The default is the version this Step release was tested with.  Change it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. | required | `2.11.0` |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`. |  |  |
+| `quarantined_tests` | The tests quarantined on Bitrise. The Step skips the flows among them, matched by the flow name shown on the Test Reports page.  Bitrise sets `$BITRISE_QUARANTINED_TESTS_JSON` for every build. Clear the input to run every flow. |  | `$BITRISE_QUARANTINED_TESTS_JSON` |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
 </details>
 
@@ -127,7 +129,7 @@ workflows:
 
 | Environment Variable | Description |
 | --- | --- |
-| `MAESTRO_JUNIT_PATH` | Path to the JUnit report written by Maestro. |
+| `MAESTRO_JUNIT_PATH` | Path to the JUnit report of the flows, with every run of a retried flow. |
 | `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory. |
 </details>
 
