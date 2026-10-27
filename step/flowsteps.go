@@ -31,8 +31,8 @@ type flowStep struct {
 	Details string `json:"details,omitempty"`
 }
 
-// commandRecord is a commands.json entry without its "command" object. That object holds the flow's env, which can
-// carry secrets passed with -e, so it is never read.
+// commandRecord is a commands.json entry without its "command" object and without metadata.evaluatedCommand. Both
+// hold the flow's env, which can carry secrets passed with -e (evaluatedCommand already resolved), so neither is read.
 type commandRecord struct {
 	Metadata struct {
 		Status   string `json:"status"`
