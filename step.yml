@@ -77,6 +77,18 @@ inputs:
     summary: The name the results are shown under on the Test Reports page.
     is_required: true
 
+- num_flaky_test_attempts: "0"
+  opts:
+    title: Retries of a failed flow
+    summary: How many times a failed flow runs again. A flow that passes on a retry is reported as flaky and does not fail the Step.
+    description: |-
+      How many times a failed flow runs again. A flow that passes on a retry is reported as flaky on the Test Reports page and does not fail the Step. The Step fails when a flow fails on every run.
+
+      Only the failed flows run again, with the same tags and arguments. The Test Reports page shows every run of a flow with its own screenshots and logs.
+
+      `0` turns retries off, the maximum is `10`. Rerunning a flow needs Maestro 2.6.0 or newer. Flows that the workspace config orders with `executionOrder` may not run again.
+    is_required: true
+
 - maestro_version: 2.11.0
   opts:
     category: Debugging
@@ -111,7 +123,7 @@ outputs:
 - MAESTRO_JUNIT_PATH:
   opts:
     title: JUnit report path
-    summary: Path to the JUnit report written by Maestro.
+    summary: Path to the JUnit report of the flows, with every run of a retried flow.
 
 - MAESTRO_TEST_OUTPUT_ZIP_PATH:
   opts:

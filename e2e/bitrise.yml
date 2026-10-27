@@ -23,6 +23,14 @@ workflows:
     steps:
     - bundle::android_failing_flow: {}
 
+  test_android_flaky_flow:
+    title: Android flow that passes on a retry
+    description: Runs a flow that fails on its first run and passes on the retry, and checks that the Step passes and the report keeps both runs.
+    envs:
+    - TEST_NAME: Maestro Android flaky
+    steps:
+    - bundle::android_flaky_flow: {}
+
   test_ios:
     title: iOS flows picked by tags
     description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
@@ -85,6 +93,53 @@ step_bundles:
             set -euxo pipefail
             grep -q "<failure" "$MAESTRO_JUNIT_PATH"
             find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
+    - bundle::verify_outputs: {}
+    - bundle::stop_android_emulator: {}
+
+  android_flaky_flow:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
+    steps:
+    - bundle::download_samples: {}
+    - bundle::start_android_emulator: {}
+    - script@1:
+        title: Write a flow that fails on the app's first launch only
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            cat > "$SAMPLES_DIR/flaky-flow.yaml" <<'EOF'
+            appId: org.wikipedia
+            name: flaky-flow
+            ---
+            - launchApp
+            - runFlow:
+                when:
+                  visible: "Forward"
+                commands:
+                  - runFlow: subflows/onboarding-android.yaml
+                  - assertVisible: "This text is never on screen"
+                label: Fail on the first launch, after finishing the onboarding
+            EOF
+            adb -s "$BITRISE_EMULATOR_SERIAL" uninstall org.wikipedia || true
+    - path::./:
+        title: Execute step
+        inputs:
+        - app_path: $SAMPLES_DIR/wikipedia.apk
+        - flow_path: $SAMPLES_DIR/flaky-flow.yaml
+        - num_flaky_test_attempts: "1"
+        - test_name: $TEST_NAME
+    - script@1:
+        title: Verify the report has the failed and the passed run
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            test "$(grep -c '<testcase ' "$MAESTRO_JUNIT_PATH")" = 2
+            test "$(grep -c '<failure' "$MAESTRO_JUNIT_PATH")" = 1
+            test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
+            grep -q 'value="attempt-2/flaky-flow/' "$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
     - bundle::verify_outputs: {}
     - bundle::stop_android_emulator: {}
 

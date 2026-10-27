@@ -2,7 +2,6 @@ package step
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"maps"
 	"os"
@@ -10,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/bitrise-io/go-android/v2/testresult/junitxml"
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
+	"github.com/bitrise-io/go-steputils/v2/testreport"
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/fileutil"
 	"github.com/bitrise-io/go-utils/v2/log"
@@ -45,6 +44,7 @@ type Input struct {
 	ExcludeTags    string `env:"exclude_tags"`
 	AdditionalArgs string `env:"additional_args"`
 	TestName       string `env:"test_name,required"`
+	FlakyAttempts  int    `env:"num_flaky_test_attempts,range[0..10]"`
 	MaestroVersion string `env:"maestro_version,required"`
 	TestResultDir  string `env:"bitrise_test_result_dir,dir"`
 	DeployDir      string `env:"BITRISE_DEPLOY_DIR"`
@@ -58,16 +58,20 @@ type Config struct {
 	IncludeTags    []string
 	ExcludeTags    []string
 	AdditionalArgs []string
-	TestName       string
-	MaestroVersion string
-	TestResultDir  string
-	DeployDir      string
-	AndroidSDKDir  string
+	// WorkspaceConfig is the config.yaml Maestro would find in the flow folders. It is passed explicitly, as the
+	// retries pass flow files, and Maestro looks for it only in folders. Empty when additional_args has --config.
+	WorkspaceConfig string
+	TestName        string
+	FlakyAttempts   int
+	MaestroVersion  string
+	TestResultDir   string
+	DeployDir       string
+	AndroidSDKDir   string
 }
 
 type Result struct {
-	JUnitPath     string
-	TestOutputDir string
+	WorkDir  string
+	Attempts []Attempt
 }
 
 type Exporter interface {
@@ -139,16 +143,18 @@ func configFromInput(input Input) (Config, error) {
 	}
 
 	return Config{
-		FlowPaths:      flowPaths,
-		App:            app,
-		IncludeTags:    splitList(input.IncludeTags),
-		ExcludeTags:    splitList(input.ExcludeTags),
-		AdditionalArgs: additionalArgs,
-		TestName:       input.TestName,
-		MaestroVersion: maestroVersion,
-		TestResultDir:  input.TestResultDir,
-		DeployDir:      input.DeployDir,
-		AndroidSDKDir:  findAndroidSDKDir(input.AndroidHome, input.AndroidSDKRoot),
+		FlowPaths:       flowPaths,
+		App:             app,
+		IncludeTags:     splitList(input.IncludeTags),
+		ExcludeTags:     splitList(input.ExcludeTags),
+		AdditionalArgs:  additionalArgs,
+		WorkspaceConfig: workspaceConfigPath(flowPaths, additionalArgs),
+		TestName:        input.TestName,
+		FlakyAttempts:   input.FlakyAttempts,
+		MaestroVersion:  maestroVersion,
+		TestResultDir:   input.TestResultDir,
+		DeployDir:       input.DeployDir,
+		AndroidSDKDir:   findAndroidSDKDir(input.AndroidHome, input.AndroidSDKRoot),
 	}, nil
 }
 
@@ -170,77 +176,102 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	result := Result{
-		JUnitPath:     filepath.Join(workDir, junitReportFileName),
-		TestOutputDir: filepath.Join(workDir, testOutputDirectoryName),
+	result := Result{WorkDir: workDir}
+
+	flowPaths := config.FlowPaths
+	var runErr error
+	for number := 1; ; number++ {
+		attempt, err := newAttempt(workDir, number)
+		if err != nil {
+			return result, err
+		}
+		result.Attempts = append(result.Attempts, attempt)
+
+		s.logger.Println()
+		if number == 1 {
+			s.logger.Infof("Running Maestro flows")
+		} else {
+			s.logger.Infof("Attempt %d of %d: running the failed flows again", number, config.FlakyAttempts+1)
+		}
+		runErr = s.runMaestro(installation, testArgs(config, attempt, flowPaths))
+
+		if runErr == nil || number > config.FlakyAttempts {
+			break
+		}
+		if flowPaths = s.flowFilesToRerun(attempt); len(flowPaths) == 0 {
+			break
+		}
 	}
 
-	args := testArgs(config, result)
+	if flaky := flakyFlows(readReports(result.Attempts)); len(flaky) > 0 {
+		s.logger.Println()
+		s.logger.Donef("Passed on a retry, reported as flaky: %s", strings.Join(flaky, ", "))
+	}
+	return result, flowsError(result.Attempts, runErr)
+}
+
+func (s Step) runMaestro(installation Installation, args []string) error {
 	cmd := s.commandFactory.Create(installation.BinaryPath, args, &command.Opts{
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 		Env:    []string{disableAnalyticsEnv, disableUpdateCheckEnv},
 	})
-
-	s.logger.Println()
-	s.logger.Infof("Running Maestro flows")
 	s.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
+	return cmd.Run()
+}
 
-	if err := cmd.Run(); err != nil {
-		return result, flowsError(result.JUnitPath, err)
+// flowFilesToRerun returns the flow files that failed in the attempt. It returns none when the attempt wrote no
+// report, as then Maestro failed for another reason than a failing flow.
+func (s Step) flowFilesToRerun(attempt Attempt) []string {
+	report, err := readReport(attempt.JUnitPath)
+	if err != nil {
+		return nil
 	}
-	return result, nil
+	files, withoutFile := failedFlowFiles(report)
+	for _, name := range withoutFile {
+		s.logger.Warnf("Flow %q failed, but the report does not name its file, so it is not run again. Maestro writes the file from 2.6.0.", name)
+	}
+	return files
 }
 
 // flowsError tells failing flows, which are the customer's tests, apart from Maestro failing for any other reason.
-// Maestro writes no report when, for example, a flow file does not parse.
-func flowsError(junitPath string, runErr error) error {
-	total, failed, err := countFlows(junitPath)
-	if err != nil || failed == 0 {
-		return fmt.Errorf("%s: %w", errMaestroFailed, runErr)
-	}
-	return fmt.Errorf("%s: %w", errFlowsFailed, fmt.Errorf("%d of %d flows failed", failed, total))
-}
-
-func countFlows(junitPath string) (total, failed int, err error) {
-	if !exists(junitPath) {
-		return 0, 0, fmt.Errorf("no JUnit report at %s", junitPath)
-	}
-	converter := junitxml.Converter{}
-	converter.Detect([]string{junitPath})
-	report, err := converter.Convert()
-	if err != nil {
-		return 0, 0, err
-	}
-	for _, suite := range report.TestSuites {
-		for _, testCase := range suite.TestCases {
-			total++
-			if testCase.Failure != nil || testCase.Error != nil {
-				failed++
-			}
+// Maestro writes no report when, for example, a flow file does not parse. Each flow counts by its last run.
+func flowsError(attempts []Attempt, runErr error) error {
+	total, failed := 0, 0
+	for _, testCase := range lastRuns(readReports(attempts)) {
+		total++
+		if flowFailed(testCase) {
+			failed++
 		}
 	}
-	return total, failed, nil
+	if failed > 0 {
+		return fmt.Errorf("%s: %w", errFlowsFailed, fmt.Errorf("%d of %d flows failed", failed, total))
+	}
+	if runErr != nil {
+		return fmt.Errorf("%s: %w", errMaestroFailed, runErr)
+	}
+	return nil
 }
 
 func (s Step) ExportOutputs(config Config, result Result) error {
 	s.logger.Println()
 	s.logger.Infof("Exporting outputs")
 
-	if exists(result.JUnitPath) {
-		if err := s.exporter.ExportOutput(junitPathOutputKey, result.JUnitPath); err != nil {
+	if len(result.Attempts) > 0 {
+		if err := s.exportReport(config, result); err != nil {
 			return fmt.Errorf("%s: %w", errExportOutputs, err)
 		}
-		s.logger.Donef("%s: %s", junitPathOutputKey, result.JUnitPath)
-
-		s.exportTestResults(config, result)
-	} else if result.JUnitPath != "" {
-		s.logger.Warnf("Maestro did not produce a JUnit report at %s", result.JUnitPath)
 	}
 
-	if exists(result.TestOutputDir) && config.DeployDir != "" {
+	var outputDirs []string
+	for _, attempt := range result.Attempts {
+		if exists(attempt.TestOutputDir) {
+			outputDirs = append(outputDirs, filepath.Dir(attempt.TestOutputDir))
+		}
+	}
+	if len(outputDirs) > 0 && config.DeployDir != "" {
 		zipPath := filepath.Join(config.DeployDir, testOutputZipFileName)
-		if err := s.exporter.ExportOutputFilesZip(testOutputZipOutputKey, []string{result.TestOutputDir}, zipPath); err != nil {
+		if err := s.exporter.ExportOutputFilesZip(testOutputZipOutputKey, outputDirs, zipPath); err != nil {
 			s.logger.Warnf("Failed to export Maestro test output: %s", err)
 		} else {
 			s.logger.Donef("%s: %s", testOutputZipOutputKey, zipPath)
@@ -248,6 +279,56 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 	}
 
 	return nil
+}
+
+// exportReport writes the attempts' reports merged into one, with each attempt's Maestro output linked to its test
+// cases, and exports it as the JUnit report output and as the test results.
+func (s Step) exportReport(config Config, result Result) error {
+	report, linked, ok := s.mergedReport(result.Attempts)
+	if !ok {
+		s.logger.Warnf("Maestro did not produce a JUnit report")
+		return nil
+	}
+
+	junitPath := filepath.Join(result.WorkDir, junitReportFileName)
+	if err := writeJUnitReport(report, junitPath); err != nil {
+		return err
+	}
+	if err := s.exporter.ExportOutput(junitPathOutputKey, junitPath); err != nil {
+		return err
+	}
+	s.logger.Donef("%s: %s", junitPathOutputKey, junitPath)
+
+	s.exportTestResults(config, junitPath, linked)
+	return nil
+}
+
+// mergedReport merges the reports of the attempts that wrote one, and returns the linked flow folders by their
+// folder next to the report.
+func (s Step) mergedReport(attempts []Attempt) (testreport.TestReport, map[string]flowBundle, bool) {
+	var reports []testreport.TestReport
+	linked := map[string]flowBundle{}
+	for _, attempt := range attempts {
+		report, err := readReport(attempt.JUnitPath)
+		if err != nil {
+			continue
+		}
+
+		if bundles, err := findFlowBundles(attempt.TestOutputDir, attempt.Name); err != nil {
+			s.logger.Warnf("Test attachments of %s are not exported: %s", attempt.Name, err)
+		} else {
+			link := linkAttachments(&report, bundles)
+			for _, warning := range link.Warnings {
+				s.logger.Warnf("%s", warning)
+			}
+			maps.Copy(linked, link.Linked)
+		}
+		reports = append(reports, report)
+	}
+	if len(reports) == 0 {
+		return testreport.TestReport{}, nil, false
+	}
+	return mergeReports(reports), linked, true
 }
 
 func (s Step) installApp(config Config) error {
@@ -290,24 +371,16 @@ func exists(pth string) bool {
 
 // exportTestResults writes the report in the layout the Deploy to Bitrise.io Step picks up from
 // $BITRISE_TEST_RESULT_DIR: the report and a test-info.json naming the run, plus the attachments.
-func (s Step) exportTestResults(config Config, result Result) {
+func (s Step) exportTestResults(config Config, junitPath string, linked map[string]flowBundle) {
 	testRun := testRunName(config.TestName)
 	testRunDir := filepath.Join(config.TestResultDir, testRun)
 	if err := s.writeTestInfo(testRunDir, testRun); err != nil {
 		s.logger.Warnf("Failed to export test results: %s", err)
 		return
 	}
-
-	reportPath := filepath.Join(testRunDir, filepath.Base(result.JUnitPath))
-	linked, err := s.writeLinkedReport(result, reportPath)
-	if err != nil {
-		s.logger.Warnf("Test attachments are not exported: %s", err)
-	}
-	if len(linked) == 0 {
-		if err := s.fileManager.CopyFile(result.JUnitPath, reportPath, &fileutil.CopyOptions{Overwrite: true}); err != nil {
-			s.logger.Warnf("Failed to export test results: %s", err)
-			return
-		}
+	if err := s.fileManager.CopyFile(junitPath, filepath.Join(testRunDir, junitReportFileName), &fileutil.CopyOptions{Overwrite: true}); err != nil {
+		s.logger.Warnf("Failed to export test results: %s", err)
+		return
 	}
 
 	attached := 0
@@ -348,38 +421,4 @@ func (s Step) writeTestInfo(testRunDir, testName string) error {
 		return err
 	}
 	return s.fileManager.WriteBytes(filepath.Join(testRunDir, "test-info.json"), testInfo)
-}
-
-// writeLinkedReport writes the JUnit report to reportPath with the flows' Maestro output linked to their test
-// cases, and returns the linked flow folders. It writes nothing when there is nothing to link.
-func (s Step) writeLinkedReport(result Result, reportPath string) (map[string]flowBundle, error) {
-	converter := junitxml.Converter{}
-	converter.Detect([]string{result.JUnitPath})
-	report, err := converter.Convert()
-	if err != nil {
-		return nil, fmt.Errorf("parse JUnit report: %w", err)
-	}
-
-	bundles, err := findFlowBundles(result.TestOutputDir)
-	if err != nil {
-		return nil, err
-	}
-
-	link := linkAttachments(&report, bundles)
-	for _, warning := range link.Warnings {
-		s.logger.Warnf("%s", warning)
-	}
-	if len(link.Linked) == 0 {
-		return nil, nil
-	}
-
-	data, err := xml.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	data = append([]byte(xml.Header), data...)
-	if err := os.WriteFile(reportPath, data, 0644); err != nil {
-		return nil, err
-	}
-	return link.Linked, nil
 }
