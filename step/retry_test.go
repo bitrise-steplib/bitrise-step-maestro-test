@@ -218,11 +218,11 @@ func TestFailedFlowFiles(t *testing.T) {
 }
 
 func TestMergeReports(t *testing.T) {
-	first := testreport.TestReport{TestSuites: []testreport.TestSuite{{Name: "Test Suite", Tests: 2, Failures: 1, TestCases: []testreport.TestCase{
+	first := testreport.TestReport{TestSuites: []testreport.TestSuite{{Name: "Test Suite", Tests: 2, Failures: 1, Time: 40, TestCases: []testreport.TestCase{
 		{Name: "Flow A", ClassName: "Flow A"},
 		{Name: "Flow B", ClassName: "Flow B", Failure: &testreport.Failure{}},
 	}}}}
-	retry := testreport.TestReport{TestSuites: []testreport.TestSuite{{Name: "Test Suite", Tests: 1, TestCases: []testreport.TestCase{
+	retry := testreport.TestReport{TestSuites: []testreport.TestSuite{{Name: "Test Suite", Tests: 1, Time: 20, TestCases: []testreport.TestCase{
 		{Name: "Flow B", ClassName: "Flow B"},
 	}}}}
 
@@ -231,6 +231,7 @@ func TestMergeReports(t *testing.T) {
 	assert.Equal(t, []string{"Flow A", "Flow B", "Flow B"}, testCaseNames(merged))
 	assert.Equal(t, 3, merged.TestSuites[0].Tests)
 	assert.Equal(t, 1, merged.TestSuites[0].Failures)
+	assert.Equal(t, 60.0, merged.TestSuites[0].Time)
 	assert.Len(t, first.TestSuites[0].TestCases, 2, "the attempts' reports are left as they are")
 
 	assert.Equal(t, first, mergeReports([]testreport.TestReport{first}), "a single attempt's report is kept as it is")

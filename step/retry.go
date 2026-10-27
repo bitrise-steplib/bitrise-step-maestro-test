@@ -151,6 +151,9 @@ func mergeReports(reports []testreport.TestReport) testreport.TestReport {
 	suite := &merged.TestSuites[0]
 	suite.TestCases = slices.Clone(suite.TestCases)
 	for _, report := range reports[1:] {
+		for _, retrySuite := range report.TestSuites {
+			suite.Time += retrySuite.Time
+		}
 		forEachTestCase(&report, func(testCase *testreport.TestCase) {
 			suite.TestCases = append(suite.TestCases, *testCase)
 		})
