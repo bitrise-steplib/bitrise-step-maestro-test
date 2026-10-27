@@ -111,6 +111,17 @@ inputs:
       Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`.
     is_required: false
 
+- quarantined_tests: $BITRISE_QUARANTINED_TESTS_JSON
+  opts:
+    category: Debugging
+    title: Quarantined tests
+    summary: The tests quarantined on Bitrise. The Step skips the flows among them.
+    description: |-
+      The tests quarantined on Bitrise. The Step skips the flows among them, matched by the flow name shown on the Test Reports page.
+
+      Bitrise sets `$BITRISE_QUARANTINED_TESTS_JSON` for every build. Clear the input to run every flow.
+    is_required: false
+
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR
   opts:
     category: Debugging

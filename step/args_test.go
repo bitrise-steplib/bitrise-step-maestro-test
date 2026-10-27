@@ -92,6 +92,9 @@ func TestConfigArg(t *testing.T) {
 	assert.Equal(t, "user.yaml", value)
 	_, ok = configArgValue([]string{"-e", "A=1"})
 	assert.False(t, ok)
+
+	assert.Equal(t, []string{"-e", "A=1"}, withoutConfigArg([]string{"--config", "user.yaml", "-e", "A=1"}))
+	assert.Equal(t, []string{"-e", "A=1"}, withoutConfigArg([]string{"-e", "A=1", "--config=user.yaml"}))
 }
 
 func TestWorkspaceConfigPath(t *testing.T) {

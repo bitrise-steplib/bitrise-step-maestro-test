@@ -111,6 +111,20 @@ func configArgValue(args []string) (string, bool) {
 	return "", false
 }
 
+func withoutConfigArg(args []string) []string {
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--config":
+			i++
+		case strings.HasPrefix(args[i], "--config="):
+		default:
+			kept = append(kept, args[i])
+		}
+	}
+	return kept
+}
+
 func installAppCommand(app App, deviceID, sdkDir string) (string, []string) {
 	if app.Platform == PlatformAndroid {
 		return adbPath(sdkDir), []string{"-s", deviceID, "install", "-r", app.Path}

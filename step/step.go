@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
+	"github.com/bitrise-io/go-steputils/v2/testquarantine"
 	"github.com/bitrise-io/go-steputils/v2/testreport"
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/fileutil"
@@ -45,6 +46,7 @@ type Input struct {
 	AdditionalArgs string `env:"additional_args"`
 	TestName       string `env:"test_name,required"`
 	FlakyAttempts  int    `env:"num_flaky_test_attempts,range[0..10]"`
+	Quarantined    string `env:"quarantined_tests"`
 	MaestroVersion string `env:"maestro_version,required"`
 	TestResultDir  string `env:"bitrise_test_result_dir,dir"`
 	DeployDir      string `env:"BITRISE_DEPLOY_DIR"`
@@ -63,6 +65,7 @@ type Config struct {
 	WorkspaceConfig string
 	TestName        string
 	FlakyAttempts   int
+	Quarantined     []testquarantine.QuarantinedTest
 	MaestroVersion  string
 	TestResultDir   string
 	DeployDir       string
@@ -142,6 +145,11 @@ func configFromInput(input Input) (Config, error) {
 		return Config{}, err
 	}
 
+	quarantined, err := testquarantine.ParseQuarantinedTests(input.Quarantined)
+	if err != nil {
+		return Config{}, fmt.Errorf("quarantined_tests: %w", err)
+	}
+
 	return Config{
 		FlowPaths:       flowPaths,
 		App:             app,
@@ -151,6 +159,7 @@ func configFromInput(input Input) (Config, error) {
 		WorkspaceConfig: workspaceConfigPath(flowPaths, additionalArgs),
 		TestName:        input.TestName,
 		FlakyAttempts:   input.FlakyAttempts,
+		Quarantined:     quarantined,
 		MaestroVersion:  maestroVersion,
 		TestResultDir:   input.TestResultDir,
 		DeployDir:       input.DeployDir,
@@ -177,6 +186,15 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 		return Result{}, err
 	}
 	result := Result{WorkDir: workDir}
+
+	if config, err = s.skipQuarantinedFlows(config, workDir); err != nil {
+		s.logger.Warnf("Quarantined flows are not skipped: %s", err)
+	}
+	if len(config.FlowPaths) == 0 {
+		s.logger.Println()
+		s.logger.Donef("Every flow is quarantined, Maestro does not run")
+		return result, nil
+	}
 
 	flowPaths := config.FlowPaths
 	var runErr error
@@ -218,6 +236,48 @@ func (s Step) runMaestro(installation Installation, args []string) error {
 	})
 	s.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
 	return cmd.Run()
+}
+
+// skipQuarantinedFlows leaves the quarantined flows out of the run. A flow file given in flow_path is left out of the
+// command, a flow found in a folder is excluded by a copy of the workspace config. On an error it returns the config
+// unchanged.
+func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error) {
+	if len(config.Quarantined) == 0 {
+		return config, nil
+	}
+	baseConfig := config.WorkspaceConfig
+	if userConfig, ok := configArgValue(config.AdditionalArgs); ok {
+		baseConfig = userConfig
+	}
+	flows, err := findFlowFiles(config.FlowPaths, baseConfig)
+	if err != nil {
+		return config, err
+	}
+	quarantined := quarantinedFlows(config.Quarantined, flows)
+	if len(quarantined) == 0 {
+		return config, nil
+	}
+
+	s.logger.Println()
+	s.logger.Infof("Skipping quarantined flows")
+	skipped := config
+	skipped.FlowPaths = slices.DeleteFunc(slices.Clone(config.FlowPaths), func(flowPath string) bool {
+		return slices.ContainsFunc(quarantined, func(flow flowFile) bool { return flow.Folder == "" && flow.Path == flowPath })
+	})
+	inFolders := false
+	for _, flow := range quarantined {
+		s.logger.Printf("- %s (%s)", flow.Name, flow.Path)
+		inFolders = inFolders || flow.Folder != ""
+	}
+	if inFolders {
+		dst := filepath.Join(workDir, "quarantine-config.yaml")
+		if err := writeQuarantineConfig(baseConfig, dst, quarantined); err != nil {
+			return config, err
+		}
+		skipped.WorkspaceConfig = dst
+		skipped.AdditionalArgs = withoutConfigArg(config.AdditionalArgs)
+	}
+	return skipped, nil
 }
 
 // flowFilesToRerun returns the flow files that failed in the attempt. It returns none when the attempt wrote no
