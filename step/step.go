@@ -286,8 +286,6 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 	return skipped, nil
 }
 
-// flowFilesToRerun returns the flow files that failed in the attempt. It returns none when the attempt wrote no
-// report, as then Maestro failed for another reason than a failing flow.
 func (s Step) flowFilesToRerun(attempt Attempt) []string {
 	report, err := readReport(attempt.JUnitPath)
 	if err != nil {
@@ -347,8 +345,6 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 	return nil
 }
 
-// exportReport writes the attempts' reports merged into one, with each attempt's Maestro output linked to its test
-// cases, and exports it as the JUnit report output and as the test results.
 func (s Step) exportReport(config Config, result Result) error {
 	report, linked, ok := s.mergedReport(result.Attempts)
 	if !ok {
@@ -369,8 +365,6 @@ func (s Step) exportReport(config Config, result Result) error {
 	return nil
 }
 
-// mergedReport merges the reports of the attempts that wrote one, and returns the linked flow folders by their
-// folder next to the report.
 func (s Step) mergedReport(attempts []Attempt) (testreport.TestReport, map[string]flowBundle, bool) {
 	var reports []testreport.TestReport
 	linked := map[string]flowBundle{}

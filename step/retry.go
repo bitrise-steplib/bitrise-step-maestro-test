@@ -34,8 +34,6 @@ func newAttempt(workDir string, number int) (Attempt, error) {
 	}, nil
 }
 
-// readReports returns the reports of the attempts that wrote one. Maestro writes none when it fails for another
-// reason than a failing flow.
 func readReports(attempts []Attempt) []testreport.TestReport {
 	var reports []testreport.TestReport
 	for _, attempt := range attempts {
