@@ -24,6 +24,10 @@ Only one device of the app's platform may run: the Step fails before installing 
 #### Flow variables
 
 Maestro passes every environment variable with the `MAESTRO_` prefix to the flows, so an Env Var or Secret named `MAESTRO_USERNAME` is available as `${MAESTRO_USERNAME}`.
+
+#### Useful links
+
+- [Running Maestro tests on Bitrise](https://docs.bitrise.io/en/bitrise-ci/testing/running-maestro-tests-on-bitrise)
 </details>
 
 ## 🧩 Get started
