@@ -91,7 +91,7 @@ func TestRun_SkipsQuarantinedFlowsOfAFolder(t *testing.T) {
 
 	config := retryConfig(t, 0)
 	config.FlowPaths = []string{folder}
-	config.AdditionalArgs = []string{"--config", userConfig, "-e", "USERNAME=bitrise"}
+	config.AdditionalArgs = []string{"--config", userConfig, "--no-reinstall-driver"}
 	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Login", ClassName: "Login"}}
 	result, err := s.Run(config, Installation{BinaryPath: maestro.binary})
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestRun_SkipsQuarantinedFlowsOfAFolder(t *testing.T) {
 	invocations := maestro.invocations(t)
 	require.Len(t, invocations, 1)
 	generated := filepath.Join(result.WorkDir, "quarantine-config.yaml")
-	assert.Contains(t, invocations[0], "--config "+generated+" -e USERNAME=bitrise "+folder, "the generated config replaces the user's")
+	assert.Contains(t, invocations[0], "--config "+generated+" --no-reinstall-driver "+folder, "the generated config replaces the user's")
 	assert.Equal(t, "platform:\n  android:\n    disableAnimations: true\nflows:\n  - '*'\n  - '!login.yaml'\n", readFileString(t, generated))
 }
 

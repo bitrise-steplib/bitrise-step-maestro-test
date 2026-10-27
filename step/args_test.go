@@ -46,7 +46,7 @@ func TestTestArgs(t *testing.T) {
 		App:            App{Path: "app.apk", Platform: PlatformAndroid},
 		IncludeTags:    []string{"smoke", "android"},
 		ExcludeTags:    []string{"flaky"},
-		AdditionalArgs: []string{"-e", "USERNAME=bitrise"},
+		AdditionalArgs: []string{"--no-reinstall-driver"},
 	}
 	attempt := Attempt{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
 
@@ -54,7 +54,7 @@ func TestTestArgs(t *testing.T) {
 		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out",
 		"--include-tags", "smoke,android",
 		"--exclude-tags", "flaky",
-		"-e", "USERNAME=bitrise",
+		"--no-reinstall-driver",
 		".maestro",
 	}, testArgs(config, attempt, config.FlowPaths))
 }
@@ -84,17 +84,17 @@ func TestTestArgs_WorkspaceConfig(t *testing.T) {
 }
 
 func TestConfigArg(t *testing.T) {
-	value, ok := configArgValue([]string{"-e", "A=1", "--config", "user.yaml"})
+	value, ok := configArgValue([]string{"--device", "emulator-5554", "--config", "user.yaml"})
 	assert.True(t, ok)
 	assert.Equal(t, "user.yaml", value)
 	value, ok = configArgValue([]string{"--config=user.yaml"})
 	assert.True(t, ok)
 	assert.Equal(t, "user.yaml", value)
-	_, ok = configArgValue([]string{"-e", "A=1"})
+	_, ok = configArgValue([]string{"--device", "emulator-5554"})
 	assert.False(t, ok)
 
-	assert.Equal(t, []string{"-e", "A=1"}, withoutConfigArg([]string{"--config", "user.yaml", "-e", "A=1"}))
-	assert.Equal(t, []string{"-e", "A=1"}, withoutConfigArg([]string{"-e", "A=1", "--config=user.yaml"}))
+	assert.Equal(t, []string{"--device", "emulator-5554"}, withoutConfigArg([]string{"--config", "user.yaml", "--device", "emulator-5554"}))
+	assert.Equal(t, []string{"--device", "emulator-5554"}, withoutConfigArg([]string{"--device", "emulator-5554", "--config=user.yaml"}))
 }
 
 func TestWorkspaceConfigPath(t *testing.T) {
