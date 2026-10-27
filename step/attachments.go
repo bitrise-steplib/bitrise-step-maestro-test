@@ -134,17 +134,17 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}, TestCases: map[string]*testreport.TestCase{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
 		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[prefix][0].Name, folder))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
 			continue
 		}
 
 		testCases := testCasesByFolder[folder]
 		switch {
 		case len(testCases) == 0:
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files are not attached", folder))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files and step list are not added", folder))
 			continue
 		case len(testCases) > 1:
-			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, their files are not attached", testCases[0].Name))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, their files and step lists are not added", testCases[0].Name))
 			continue
 		}
 
