@@ -137,6 +137,11 @@ step_bundles:
             name: flaky-flow
             ---
             - launchApp
+            - extendedWaitUntil:
+                visible: "Next"
+                timeout: 15000
+                optional: true
+                label: Wait for the onboarding, shown on the first launch only
             - runFlow:
                 when:
                   visible: "Next"
