@@ -270,6 +270,9 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 		inFolders = inFolders || flow.Folder != ""
 	}
 	if inFolders {
+		if !excludesFlowsByPattern(config.MaestroVersion) {
+			s.logger.Warnf("Maestro %s cannot exclude flows found in folders, so these quarantined flows still run. Use Maestro %s or newer to skip them.", config.MaestroVersion, flowExclusionMaestroVersion)
+		}
 		dst := filepath.Join(workDir, "quarantine-config.yaml")
 		if err := writeQuarantineConfig(baseConfig, dst, quarantined); err != nil {
 			return config, err

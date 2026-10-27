@@ -120,6 +120,8 @@ inputs:
       The tests quarantined on Bitrise. The Step skips the flows among them, matched by the flow name shown on the Test Reports page.
 
       Bitrise sets `$BITRISE_QUARANTINED_TESTS_JSON` for every build. Clear the input to run every flow.
+
+      Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.
     is_required: false
 
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR

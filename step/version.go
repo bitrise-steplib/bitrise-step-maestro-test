@@ -10,6 +10,15 @@ import (
 // The step passes --test-output-dir to `maestro test`, which this release already has.
 const minimumMaestroVersion = "2.1.0"
 
+// Maestro reads the "!pattern" exclusions of the workspace config's flows list from this release. Older releases take
+// them as patterns that match no flow, so a quarantined flow found in a folder still runs.
+const flowExclusionMaestroVersion = "2.9.0"
+
+func excludesFlowsByPattern(maestroVersion string) bool {
+	requested, err := version.NewVersion(maestroVersion)
+	return err != nil || !requested.LessThan(version.Must(version.NewVersion(flowExclusionMaestroVersion)))
+}
+
 func resolveMaestroVersion(input string) (string, error) {
 	input = strings.TrimSpace(input)
 	requested, err := version.NewVersion(input)
