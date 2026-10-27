@@ -73,8 +73,8 @@ func readFlowFile(pth, folder string) flowFile {
 	flow := flowFile{Path: pth, Folder: folder, Name: strings.TrimSuffix(filepath.Base(pth), filepath.Ext(pth))}
 
 	var config struct {
-		Name       string         `yaml:"name"`
-		Properties map[string]any `yaml:"properties"`
+		Name       string            `yaml:"name"`
+		Properties map[string]string `yaml:"properties"`
 	}
 	if data, err := os.ReadFile(pth); err == nil && bytes.Contains(data, []byte("\n---")) {
 		if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&config); err == nil && config.Name != "" {
@@ -82,7 +82,7 @@ func readFlowFile(pth, folder string) flowFile {
 		}
 	}
 	flow.ClassName = flow.Name
-	if className, ok := config.Properties["junitClassname"].(string); ok && className != "" {
+	if className := config.Properties["junitClassname"]; className != "" {
 		flow.ClassName = className
 	}
 	return flow
@@ -148,27 +148,37 @@ func flowsPatterns(mapping *yaml.Node) *yaml.Node {
 			continue
 		}
 		value := mapping.Content[i+1]
-		if value.Kind == yaml.ScalarNode {
+		switch {
+		case value.ShortTag() == "!!null":
+			mapping.Content[i+1] = defaultFlowsPatterns()
+		case value.Kind == yaml.ScalarNode:
 			mapping.Content[i+1] = &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{value}}
 		}
 		return mapping.Content[i+1]
 	}
-	patterns := &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{stringNode("*")}}
+	patterns := defaultFlowsPatterns()
 	mapping.Content = append(mapping.Content, stringNode("flows"), patterns)
 	return patterns
+}
+
+func defaultFlowsPatterns() *yaml.Node {
+	return &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{stringNode("*")}}
 }
 
 func stringNode(value string) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
+// escapeGlob puts the glob characters of a file name into a bracket class. A backslash escape does not work, as
+// Maestro doubles every backslash of a pattern. A closing ] or } is a literal on its own.
 func escapeGlob(pth string) string {
 	var escaped strings.Builder
 	for _, r := range pth {
-		if strings.ContainsRune(`\*?[]{}`, r) {
-			escaped.WriteRune('\\')
+		if strings.ContainsRune("*?[{", r) {
+			escaped.WriteString("[" + string(r) + "]")
+		} else {
+			escaped.WriteRune(r)
 		}
-		escaped.WriteRune(r)
 	}
 	return escaped.String()
 }

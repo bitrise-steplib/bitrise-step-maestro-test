@@ -42,6 +42,28 @@ const (
   </testsuite>
 </testsuites>
 `
+	sameNameFlowsFailReport = `<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="emulator-5554" tests="2" failures="2">
+    <testcase id="login" name="login" classname="login" file="flows/smoke/login.yaml" time="10.0" status="ERROR">
+      <failure>Assertion is false: "Welcome" is visible</failure>
+    </testcase>
+    <testcase id="login" name="login" classname="login" file="flows/regression/login.yaml" time="10.0" status="ERROR">
+      <failure>Assertion is false: "Welcome" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+`
+	smokeLoginFailsReport = `<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="emulator-5554" tests="2" failures="1">
+    <testcase id="login" name="login" classname="login" file="flows/smoke/login.yaml" time="10.0" status="ERROR">
+      <failure>Assertion is false: "Welcome" is visible</failure>
+    </testcase>
+    <testcase id="login" name="login" classname="login" file="flows/regression/login.yaml" time="10.0" status="SUCCESS"/>
+  </testsuite>
+</testsuites>
+`
 )
 
 func TestRun_RetriesFailedFlows(t *testing.T) {
@@ -93,6 +115,44 @@ func TestRun_DoesNotRetryByDefault(t *testing.T) {
 	assert.Equal(t, errFlowsFailed+":", firstLine(err))
 	assert.Len(t, maestro.invocations(t), 1)
 	assert.Len(t, result.Attempts, 1)
+}
+
+func TestRun_RetriesEveryFailedFileOfFlowsWithTheSameName(t *testing.T) {
+	maestro := newFakeMaestro(t, sameNameFlowsFailReport, smokeLoginFailsReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	_, err := s.Run(retryConfig(t, 1), Installation{BinaryPath: maestro.binary})
+	assert.Equal(t, errFlowsFailed+":\n  1 of 2 flows failed", errorutil.FormattedError(err))
+
+	invocations := maestro.invocations(t)
+	require.Len(t, invocations, 2)
+	assert.True(t, strings.HasSuffix(invocations[1], " flows/smoke/login.yaml flows/regression/login.yaml"))
+}
+
+func TestRun_CountsFlowsWithTheSameNameByFile(t *testing.T) {
+	maestro := newFakeMaestro(t, smokeLoginFailsReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	result, err := s.Run(retryConfig(t, 0), Installation{BinaryPath: maestro.binary})
+	assert.Equal(t, errFlowsFailed+":\n  1 of 2 flows failed", errorutil.FormattedError(err))
+	assert.Empty(t, flakyFlows(readReports(result.Attempts)))
+}
+
+func TestRun_DoesNotRetryFlowsOrderedByExecutionOrder(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "config.yaml"), "executionOrder:\n  continueOnFailure: false\n  flowsOrder:\n    - Flow A\n    - Flow B\n")
+	maestro := newFakeMaestro(t, flowBFailsReport, flowBPassesReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	config := retryConfig(t, 1)
+	config.FlowPaths = []string{flowDir}
+	config.WorkspaceConfig = workspaceConfigPath(config.FlowPaths, nil)
+	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	assert.Equal(t, errFlowsFailed+":", firstLine(err))
+	assert.Len(t, maestro.invocations(t), 1)
 }
 
 func TestRun_RetriesKeepTheWorkspaceConfig(t *testing.T) {

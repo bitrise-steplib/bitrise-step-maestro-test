@@ -1,6 +1,7 @@
 package step
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,6 +107,17 @@ func TestExportOutputs_WithoutMaestroOutput(t *testing.T) {
 	testInfo, err := os.ReadFile(filepath.Join(testResultDir, "Maestro", "test-info.json"))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"test-name":"Maestro"}`, string(testInfo), "the deploy step names the test run from test-info.json")
+}
+
+func TestExportOutputs_WarnsWhenTheReportDoesNotParse(t *testing.T) {
+	var logs bytes.Buffer
+	s := testStep()
+	s.logger = log.NewLogger(log.WithOutput(&logs))
+
+	truncated := maestroJUnitReport[:strings.Index(maestroJUnitReport, "</testsuite>")]
+	err := s.ExportOutputs(Config{TestName: "Maestro", TestResultDir: t.TempDir()}, singleAttemptResult(t, truncated))
+	require.NoError(t, err)
+	assert.Contains(t, logs.String(), "The JUnit report of attempt-1 is not exported: XML syntax error")
 }
 
 func TestExportOutputs_TestNameWithPathSeparator(t *testing.T) {

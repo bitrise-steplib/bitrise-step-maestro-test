@@ -60,8 +60,9 @@ type Config struct {
 	IncludeTags    []string
 	ExcludeTags    []string
 	AdditionalArgs []string
-	// WorkspaceConfig is the config.yaml Maestro would find in the flow folders. It is passed explicitly, as the
-	// retries pass flow files, and Maestro looks for it only in folders. Empty when additional_args has --config.
+	// WorkspaceConfig is passed with --config, as the retries pass flow files and Maestro looks for config.yaml only in
+	// folders. It is the flow folder's config.yaml, or the copy that skips the quarantined flows. Empty when
+	// additional_args has --config.
 	WorkspaceConfig string
 	TestName        string
 	FlakyAttempts   int
@@ -195,6 +196,11 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 		s.logger.Donef("Every flow is quarantined, Maestro does not run")
 		return result, nil
 	}
+	if config.FlakyAttempts > 0 && ordersFlows(workspaceConfig(config)) {
+		s.logger.Println()
+		s.logger.Warnf("The workspace config orders the flows with executionOrder, so failed flows do not run again.")
+		config.FlakyAttempts = 0
+	}
 
 	flowPaths := config.FlowPaths
 	var runErr error
@@ -245,10 +251,7 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 	if len(config.Quarantined) == 0 {
 		return config, nil
 	}
-	baseConfig := config.WorkspaceConfig
-	if userConfig, ok := configArgValue(config.AdditionalArgs); ok {
-		baseConfig = userConfig
-	}
+	baseConfig := workspaceConfig(config)
 	flows, err := findFlowFiles(config.FlowPaths, baseConfig)
 	if err != nil {
 		return config, err
@@ -349,7 +352,7 @@ func (s Step) ExportOutputs(config Config, result Result) error {
 func (s Step) exportReport(config Config, result Result) error {
 	report, linked, ok := s.mergedReport(result.Attempts)
 	if !ok {
-		s.logger.Warnf("Maestro did not produce a JUnit report")
+		s.logger.Warnf("No JUnit report to export")
 		return nil
 	}
 
@@ -374,6 +377,9 @@ func (s Step) mergedReport(attempts []Attempt) (testreport.TestReport, map[strin
 	for _, attempt := range attempts {
 		report, err := readReport(attempt.JUnitPath)
 		if err != nil {
+			if exists(attempt.JUnitPath) {
+				s.logger.Warnf("The JUnit report of %s is not exported: %s", attempt.Name, err)
+			}
 			continue
 		}
 

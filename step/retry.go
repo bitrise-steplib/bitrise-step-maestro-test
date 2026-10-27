@@ -9,10 +9,10 @@ import (
 
 	"github.com/bitrise-io/go-android/v2/testresult/junitxml"
 	"github.com/bitrise-io/go-steputils/v2/testreport"
+	"go.yaml.in/yaml/v3"
 )
 
-// Attempt is one run of maestro test. The first runs every flow, the later ones the flows that failed in the one
-// before.
+// Attempt is one run of maestro test. The ones after the first run the flows that failed in the one before.
 type Attempt struct {
 	// Name is the attempt's folder, in the work dir and next to the exported report.
 	Name          string
@@ -63,12 +63,27 @@ func writeJUnitReport(report testreport.TestReport, pth string) error {
 	return os.WriteFile(pth, append([]byte(xml.Header), data...), 0644)
 }
 
+// ordersFlows tells whether the workspace config runs flows in a sequence. A retry of the failed flows alone breaks
+// the sequence, and the report has no run of the flows the sequence skipped after a failure.
+func ordersFlows(workspaceConfig string) bool {
+	data, err := os.ReadFile(workspaceConfig)
+	if err != nil {
+		return false
+	}
+	var config struct {
+		ExecutionOrder *yaml.Node `yaml:"executionOrder"`
+	}
+	return yaml.Unmarshal(data, &config) == nil && config.ExecutionOrder != nil
+}
+
+// flowKey tells the runs of a flow apart from other flows. The file keeps flows with the same name apart, a retry
+// writes the same file as the first run.
 type flowKey struct {
-	name, className string
+	name, className, file string
 }
 
 func keyOf(testCase testreport.TestCase) flowKey {
-	return flowKey{testCase.Name, testCase.ClassName}
+	return flowKey{testCase.Name, testCase.ClassName, testCase.File}
 }
 
 func flowFailed(testCase testreport.TestCase) bool {

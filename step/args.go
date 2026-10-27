@@ -96,6 +96,15 @@ func workspaceConfigPath(flowPaths, additionalArgs []string) string {
 	return ""
 }
 
+// workspaceConfig returns the workspace config Maestro reads: the one additional_args gives with --config, otherwise
+// the flow folder's.
+func workspaceConfig(config Config) string {
+	if userConfig, ok := configArgValue(config.AdditionalArgs); ok {
+		return userConfig
+	}
+	return config.WorkspaceConfig
+}
+
 func configArgValue(args []string) (string, bool) {
 	for i, arg := range args {
 		if arg == "--config" {

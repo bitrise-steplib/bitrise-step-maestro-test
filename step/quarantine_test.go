@@ -15,6 +15,7 @@ import (
 func TestFindFlowFiles(t *testing.T) {
 	folder := t.TempDir()
 	writeFile(t, filepath.Join(folder, "login.yaml"), "appId: org.wikipedia\nname: Login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(folder, "numbered.yaml"), "appId: org.wikipedia\nproperties:\n  junitClassname: 42\n---\n- launchApp\n")
 	writeFile(t, filepath.Join(folder, "search.yml"), "appId: org.wikipedia\nproperties:\n  junitClassname: Search tests\n---\n- launchApp\n")
 	writeFile(t, filepath.Join(folder, "subflows", "onboarding.yaml"), "appId: org.wikipedia\n---\n- tapOn: Skip\n")
 	writeFile(t, filepath.Join(folder, "config.yaml"), "flows:\n  - '*'\n")
@@ -28,6 +29,7 @@ func TestFindFlowFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []flowFile{
 		{Path: filepath.Join(folder, "login.yaml"), Folder: folder, Name: "Login", ClassName: "Login"},
+		{Path: filepath.Join(folder, "numbered.yaml"), Folder: folder, Name: "numbered", ClassName: "42"},
 		{Path: filepath.Join(folder, "search.yml"), Folder: folder, Name: "search", ClassName: "Search tests"},
 		{Path: filepath.Join(folder, "subflows", "onboarding.yaml"), Folder: folder, Name: "onboarding", ClassName: "onboarding"},
 		{Path: file, Name: "settings", ClassName: "settings"},
@@ -55,6 +57,7 @@ func TestWriteQuarantineConfig(t *testing.T) {
 	quarantined := []flowFile{
 		{Path: filepath.Join(folder, "login.yaml"), Folder: folder},
 		{Path: filepath.Join(folder, "nested", "[wip] search.yaml"), Folder: folder},
+		{Path: filepath.Join(folder, "checkout{v2}.yaml"), Folder: folder},
 		{Path: "other/settings.yaml"},
 	}
 
@@ -63,8 +66,14 @@ func TestWriteQuarantineConfig(t *testing.T) {
 	assert.Equal(t, `flows:
   - '*'
   - '!login.yaml'
-  - '!nested/\[wip\] search.yaml'
+  - '!nested/[[]wip] search.yaml'
+  - '!checkout[{]v2}.yaml'
 `, readFileString(t, dst), "a flow file given in flow_path is left out of the command instead")
+
+	nullFlows := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, nullFlows, "flows:\n")
+	require.NoError(t, writeQuarantineConfig(nullFlows, dst, quarantined[:1]))
+	assert.Equal(t, "flows:\n  - '*'\n  - '!login.yaml'\n", readFileString(t, dst), "Maestro runs every flow when flows is empty")
 
 	base := filepath.Join(t.TempDir(), "config.yaml")
 	writeFile(t, base, "flows: \"smoke/*\"\nexecutionOrder:\n  flowsOrder:\n    - Login\nincludeTags: [smoke]\n")

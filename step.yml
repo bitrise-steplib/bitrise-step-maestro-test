@@ -86,7 +86,7 @@ inputs:
 
       Only the failed flows run again, with the same tags and arguments. The Test Reports page shows every run of a flow with its own screenshots and logs.
 
-      `0` turns retries off, the maximum is `10`. Rerunning a flow needs Maestro 2.6.0 or newer. Flows that the workspace config orders with `executionOrder` may not run again.
+      `0` turns retries off, the maximum is `10`. Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
     is_required: true
 
 - maestro_version: 2.11.0
