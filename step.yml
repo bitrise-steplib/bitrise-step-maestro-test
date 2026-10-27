@@ -83,14 +83,15 @@ inputs:
 
 - num_flaky_test_attempts: "0"
   opts:
-    title: Retries of a failed flow
-    summary: How many times a failed flow runs again. A flow that passes on a retry is reported as flaky and does not fail the Step.
+    title: Number of times a failed flow is reattempted
+    summary: Specifies the number of times a failed flow should be reattempted.
     description: |-
-      How many times a failed flow runs again. A flow that passes on a retry is reported as flaky on the Test Reports page and does not fail the Step. The Step fails when a flow fails on every run.
+      Specifies the number of times a failed flow should be reattempted. Only the failed flows run again, with the same tags and arguments.
 
-      Only the failed flows run again, with the same tags and arguments. The Test Reports page shows every run of a flow with its own screenshots and logs.
+      A flow that initially fails but succeeds on any reattempt is reported as flaky and does not fail the Step.
+      The maximum number of reruns allowed is 10. (Default: 0, which implies no reruns.)
 
-      `0` turns retries off, the maximum is `10`. Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
+      Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
     is_required: true
 
 - maestro_version: 2.11.0
@@ -119,11 +120,9 @@ inputs:
   opts:
     category: Debugging
     title: Quarantined tests
-    summary: The tests quarantined on Bitrise. The Step skips the flows among them.
+    summary: JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.
     description: |-
-      The tests quarantined on Bitrise. The Step skips the flows among them, matched by the flow name shown on the Test Reports page.
-
-      Bitrise sets `$BITRISE_QUARANTINED_TESTS_JSON` for every build. Clear the input to run every flow.
+      JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.
 
       Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.
     is_required: false
