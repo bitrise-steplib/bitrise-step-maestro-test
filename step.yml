@@ -144,4 +144,4 @@ outputs:
 - MAESTRO_TEST_OUTPUT_ZIP_PATH:
   opts:
     title: Test output zip path
-    summary: Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory.
+    summary: Path to the zipped Maestro output in the deploy directory, one attempt-N folder per run with its screenshots, logs, recordings and JUnit report.

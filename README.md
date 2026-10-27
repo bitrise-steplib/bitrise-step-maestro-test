@@ -134,7 +134,7 @@ workflows:
 | Environment Variable | Description |
 | --- | --- |
 | `MAESTRO_JUNIT_PATH` | Path to the JUnit report of the flows, with every run of a retried flow. |
-| `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory. |
+| `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro output in the deploy directory, one attempt-N folder per run with its screenshots, logs, recordings and JUnit report. |
 </details>
 
 ## 🙋 Contributing
