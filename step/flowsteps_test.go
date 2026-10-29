@@ -149,6 +149,21 @@ func TestReadFlowSteps_FailsWhenTheFilesListDifferentNumbersOfCommands(t *testin
 	assert.ErrorContains(t, err, "has 3 commands but logs/maestro.log names 2")
 }
 
+func TestReadFlowSteps_FailsWhenACommandHasNoStatus(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFlowFiles(t, flowDir,
+		testCommand{name: "Launch app", status: "COMPLETED"},
+		testCommand{name: "Tap on id: button", status: "COMPLETED"},
+	)
+	writeFile(t, filepath.Join(flowDir, "commands.json"),
+		`[{"command": {}, "metadata": {"status": "COMPLETED", "duration": 1, "depth": 0}}, {"command": {}, "metadata": {"state": "COMPLETED", "duration": 1, "depth": 0}}]`)
+
+	steps, err := readFlowSteps(flowDir)
+
+	assert.Nil(t, steps)
+	assert.ErrorContains(t, err, "command 2 of commands.json has no status")
+}
+
 func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFile(t, filepath.Join(flowDir, "commands.json"), `[{"metadata": {"status": "COMPLETED", "duration": 1, "depth": 0}}]`)

@@ -103,6 +103,9 @@ func readFlowSteps(flowDir string) ([]flowStep, error) {
 
 	steps := make([]flowStep, len(records))
 	for i, record := range records {
+		if record.Metadata.Status == "" {
+			return nil, fmt.Errorf("command %d of %s has no status", i+1, filepath.ToSlash(commandsPath))
+		}
 		steps[i] = flowStep{
 			Name:       names[i],
 			Status:     record.Metadata.Status,
