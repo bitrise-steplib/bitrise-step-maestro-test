@@ -25,6 +25,27 @@ func TestFormatStepList_ShortDurationsAreInMilliseconds(t *testing.T) {
 	assert.Equal(t, "✓ Define variables (999ms)", got)
 }
 
+func TestFormatStepList_LongDurationsAreInMinutesAndSeconds(t *testing.T) {
+	tests := []struct {
+		ms   int64
+		want string
+	}{
+		{ms: 59900, want: "59.9s"},
+		{ms: 59960, want: "1m 0s"},
+		{ms: 60000, want: "1m 0s"},
+		{ms: 90000, want: "1m 30s"},
+		{ms: 125400, want: "2m 5s"},
+		{ms: 3725000, want: "62m 5s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			got := formatStepList([]flowStep{{Name: "Wait", Status: "COMPLETED", DurationMs: tt.ms}})
+
+			assert.Equal(t, "✓ Wait ("+tt.want+")", got)
+		})
+	}
+}
+
 func TestFormatStepList_IndentsStepsByDepth(t *testing.T) {
 	steps := []flowStep{
 		{Name: "Run helpers/launch.yaml", Status: "COMPLETED", DurationMs: 8000, Depth: 0},

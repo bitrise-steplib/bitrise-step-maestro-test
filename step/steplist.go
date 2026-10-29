@@ -51,11 +51,17 @@ func displayName(name string) string {
 	return name
 }
 
+// formatDuration shows milliseconds under a second, seconds with a decimal under a minute, and minutes and seconds
+// from a minute on.
 func formatDuration(ms int64) string {
 	if ms < 1000 {
 		return fmt.Sprintf("%dms", ms)
 	}
-	return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	if tenths := (ms + 50) / 100; tenths < 600 {
+		return fmt.Sprintf("%.1fs", float64(tenths)/10)
+	}
+	seconds := (ms + 500) / 1000
+	return fmt.Sprintf("%dm %ds", seconds/60, seconds%60)
 }
 
 // childRepeatsFailure reports whether a step nested under steps[i] failed with the same message. When a subflow fails,
