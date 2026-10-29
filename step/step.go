@@ -395,12 +395,13 @@ func (s Step) exportReport(config Config, result Result) error {
 // as merging copies the test cases.
 func (s Step) addStepLists(link attachmentLinkResult) {
 	for _, folder := range slices.Sorted(maps.Keys(link.Linked)) {
-		steps, err := readFlowSteps(link.Linked[folder].Dir)
+		bundle := link.Linked[folder]
+		steps, err := readFlowSteps(bundle.Dir)
 		if err != nil {
 			s.logger.Warnf("The step list of Maestro output folder %q is not added: %s", folder, err)
 			continue
 		}
-		addStepList(link.TestCases[folder], steps)
+		addStepList(bundle.TestCase, steps)
 	}
 }
 

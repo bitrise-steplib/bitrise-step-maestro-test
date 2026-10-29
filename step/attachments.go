@@ -46,6 +46,8 @@ type flowBundle struct {
 	Files []string
 	// AttemptDir is the attempt's folder the files are exported under, relative to the report.
 	AttemptDir string
+	// TestCase is the flow's test case in the report, set when the bundle is linked to it.
+	TestCase *testreport.TestCase
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
@@ -116,10 +118,8 @@ func attachableFiles(flowDir string) ([]string, error) {
 
 type attachmentLinkResult struct {
 	// Linked maps the folder a bundle's files are exported to, relative to the report, to the bundle.
-	Linked map[string]flowBundle
-	// TestCases maps the same folders to their test cases.
-	TestCases map[string]*testreport.TestCase
-	Warnings  []string
+	Linked   map[string]flowBundle
+	Warnings []string
 }
 
 // linkAttachments matches each flow folder to its test case, and adds an attachment_N property per bundle file to it.
@@ -131,7 +131,7 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		testCasesByFolder[folder] = append(testCasesByFolder[folder], testCase)
 	})
 
-	result := attachmentLinkResult{Linked: map[string]flowBundle{}, TestCases: map[string]*testreport.TestCase{}}
+	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
 		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
@@ -151,8 +151,8 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		bundle := bundles[folder]
 		exportDir := path.Join(bundle.AttemptDir, folder)
 		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
+		bundle.TestCase = testCases[0]
 		result.Linked[exportDir] = bundle
-		result.TestCases[exportDir] = testCases[0]
 	}
 	return result
 }
