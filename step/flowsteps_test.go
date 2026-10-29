@@ -287,3 +287,45 @@ func stepDepths(steps []flowStep) []int {
 	}
 	return depths
 }
+
+func TestReadFlowSteps_FindsTheFilesTheManifestNames(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFlowFiles(t, flowDir, testCommand{name: "Launch app", status: "COMPLETED"})
+	require.NoError(t, os.MkdirAll(filepath.Join(flowDir, "meta"), 0o755))
+	require.NoError(t, os.Rename(filepath.Join(flowDir, "commands.json"), filepath.Join(flowDir, "meta", "cmds.json")))
+	require.NoError(t, os.Rename(filepath.Join(flowDir, "logs", "maestro.log"), filepath.Join(flowDir, "meta", "run.log")))
+	writeFile(t, filepath.Join(flowDir, manifestFileName), `{"entries":[
+		{"kind":"COMMAND_METADATA","relativePath":"meta/cmds.json"},
+		{"kind":"MAESTRO_LOG","relativePath":"meta/run.log"}]}`)
+
+	steps, err := readFlowSteps(flowDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
+}
+
+func TestReadFlowSteps_UsesTheDefaultPathsForWhatTheManifestDoesNotName(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFlowFiles(t, flowDir, testCommand{name: "Launch app", status: "COMPLETED"})
+	writeFile(t, filepath.Join(flowDir, manifestFileName), `{"entries":[{"kind":"SCREENSHOT","relativePath":"screenshots"}]}`)
+
+	steps, err := readFlowSteps(flowDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
+}
+
+func TestReadFlowSteps_IgnoresManifestPathsOutsideTheFlowFolder(t *testing.T) {
+	outer := t.TempDir()
+	flowDir := filepath.Join(outer, "flow")
+	writeFlowFiles(t, flowDir, testCommand{name: "Launch app", status: "COMPLETED"})
+	writeFile(t, filepath.Join(outer, "outside.json"), `[{"metadata": {"status": "FAILED"}}, {"metadata": {"status": "FAILED"}}]`)
+	writeFile(t, filepath.Join(flowDir, manifestFileName), `{"entries":[
+		{"kind":"COMMAND_METADATA","relativePath":"../outside.json"},
+		{"kind":"MAESTRO_LOG","relativePath":"`+filepath.ToSlash(filepath.Join(outer, "outside.log"))+`"}]}`)
+
+	steps, err := readFlowSteps(flowDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
+}

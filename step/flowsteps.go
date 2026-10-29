@@ -13,6 +13,9 @@ import (
 const (
 	commandsFileName = "commands.json"
 	maestroLogPath   = "logs/maestro.log"
+
+	commandMetadataKind = "COMMAND_METADATA"
+	maestroLogKind      = "MAESTRO_LOG"
 )
 
 var (
@@ -45,26 +48,57 @@ type commandRecord struct {
 	} `json:"metadata"`
 }
 
+// flowFilePaths returns where commands.json and maestro.log are in the flow's folder, relative to it. The manifest
+// names them, and the default paths are used for what it does not.
+func flowFilePaths(flowDir string) (commandsPath, logPath string) {
+	commandsPath, logPath = commandsFileName, maestroLogPath
+
+	data, err := os.ReadFile(filepath.Join(flowDir, manifestFileName))
+	if err != nil {
+		return commandsPath, logPath
+	}
+	var manifest artifactManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return commandsPath, logPath
+	}
+
+	for _, entry := range manifest.Entries {
+		rel := filepath.Clean(filepath.FromSlash(entry.RelativePath))
+		if entry.RelativePath == "" || !filepath.IsLocal(rel) {
+			continue
+		}
+		switch entry.Kind {
+		case commandMetadataKind:
+			commandsPath = rel
+		case maestroLogKind:
+			logPath = rel
+		}
+	}
+	return commandsPath, logPath
+}
+
 // readFlowSteps takes the result, duration, depth and failure of each step from commands.json, and its name from
 // maestro.log. Both list every command that started, in order, so the n-th name in the log belongs to the n-th record.
 // The steps are returned only when the two files list the same number of commands, because a wrong name is worse than
 // no list.
 func readFlowSteps(flowDir string) ([]flowStep, error) {
-	data, err := os.ReadFile(filepath.Join(flowDir, commandsFileName))
+	commandsPath, logPath := flowFilePaths(flowDir)
+
+	data, err := os.ReadFile(filepath.Join(flowDir, commandsPath))
 	if err != nil {
 		return nil, err
 	}
 	var records []commandRecord
 	if err := json.Unmarshal(data, &records); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", commandsFileName, err)
+		return nil, fmt.Errorf("parse %s: %w", filepath.ToSlash(commandsPath), err)
 	}
 
-	names, err := readCommandNames(filepath.Join(flowDir, filepath.FromSlash(maestroLogPath)))
+	names, err := readCommandNames(filepath.Join(flowDir, logPath))
 	if err != nil {
 		return nil, err
 	}
 	if len(names) != len(records) {
-		return nil, fmt.Errorf("%s has %d commands but %s names %d", commandsFileName, len(records), maestroLogPath, len(names))
+		return nil, fmt.Errorf("%s has %d commands but %s names %d", filepath.ToSlash(commandsPath), len(records), filepath.ToSlash(logPath), len(names))
 	}
 
 	steps := make([]flowStep, len(records))
@@ -126,7 +160,7 @@ func readCommandStartEntries(logPath string) ([]string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", maestroLogPath, err)
+		return nil, fmt.Errorf("read %s: %w", filepath.Base(logPath), err)
 	}
 	return entries, nil
 }
