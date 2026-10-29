@@ -105,9 +105,10 @@ func TestReadFlowSteps_LinesOfOtherLogEntriesDoNotChangeTheNames(t *testing.T) {
 func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFlowFiles(t, flowDir, testCommand{
-		name:    "Define variables",
-		status:  "COMPLETED",
-		command: `{"defineVariablesCommand": {"env": {"PASSWORD": "s3cret-value"}}}`,
+		name:             "Define variables",
+		status:           "COMPLETED",
+		command:          `{"defineVariablesCommand": {"env": {"PASSWORD": "s3cret-value"}}}`,
+		evaluatedCommand: `{"defineVariablesCommand": {"env": {"PASSWORD": "s3cret-value"}}}`,
 	})
 
 	steps, err := readFlowSteps(flowDir)
@@ -115,7 +116,7 @@ func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 
 	got, err := json.Marshal(steps)
 	require.NoError(t, err)
-	assert.NotContains(t, string(got), "s3cret-value")
+	assert.NotContains(t, string(got), "s3cret-value", "neither command nor metadata.evaluatedCommand is read")
 	assert.Equal(t, "Define variables", steps[0].Name)
 }
 
@@ -217,6 +218,8 @@ type testCommand struct {
 	status  string
 	depth   int
 	command string
+	// evaluatedCommand is the raw JSON of metadata.evaluatedCommand, left out when empty.
+	evaluatedCommand string
 
 	skipInLog bool
 }
@@ -231,8 +234,12 @@ func writeFlowFiles(t *testing.T, flowDir string, commands ...testCommand) {
 		if raw == "" {
 			raw = "{}"
 		}
-		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, "duration": 1, "depth": %d}}`,
-			raw, command.status, command.depth))
+		evaluated := ""
+		if command.evaluatedCommand != "" {
+			evaluated = fmt.Sprintf(`, "evaluatedCommand": %s`, command.evaluatedCommand)
+		}
+		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, "duration": 1, "depth": %d%s}}`,
+			raw, command.status, command.depth, evaluated))
 
 		if !command.skipInLog {
 			logLines = append(logLines,
