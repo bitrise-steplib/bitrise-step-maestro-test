@@ -310,8 +310,15 @@ func (s Step) flowFilesToRerun(attempt Attempt) []string {
 }
 
 // flowsError tells failing flows, which are the customer's tests, apart from Maestro failing for any other reason.
-// Maestro writes no report when, for example, a flow file does not parse. Each flow counts by its last run.
+// Maestro writes no report when, for example, a flow file does not parse, and a run without a report is reported as
+// Maestro failing, also when an earlier attempt has failed flows. Each flow counts by its last run.
 func flowsError(attempts []Attempt, runErr error) error {
+	if runErr != nil && len(attempts) > 0 {
+		if _, err := readReport(attempts[len(attempts)-1].JUnitPath); err != nil {
+			return maestroError(len(attempts), runErr)
+		}
+	}
+
 	total, failed := 0, 0
 	for _, testCase := range lastRuns(readReports(attempts)) {
 		total++
@@ -323,9 +330,17 @@ func flowsError(attempts []Attempt, runErr error) error {
 		return fmt.Errorf("%s: %w", errFlowsFailed, fmt.Errorf("%d of %d flows failed", failed, total))
 	}
 	if runErr != nil {
-		return fmt.Errorf("%s: %w", errMaestroFailed, runErr)
+		return maestroError(len(attempts), runErr)
 	}
 	return nil
+}
+
+// maestroError names the attempt when the Step ran Maestro more than once.
+func maestroError(attempts int, runErr error) error {
+	if attempts > 1 {
+		runErr = fmt.Errorf("attempt %d: %w", attempts, runErr)
+	}
+	return fmt.Errorf("%s: %w", errMaestroFailed, runErr)
 }
 
 func (s Step) ExportOutputs(config Config, result Result) error {

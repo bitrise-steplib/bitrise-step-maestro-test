@@ -103,7 +103,21 @@ func TestRun_DoesNotRetryWhenMaestroWritesNoReport(t *testing.T) {
 
 	_, err := s.Run(retryConfig(t, 2), Installation{BinaryPath: maestro.binary})
 	assert.Equal(t, errMaestroFailed+":", firstLine(err))
+	assert.NotContains(t, errorutil.FormattedError(err), "attempt 1:", "a single attempt is not numbered")
 	assert.Len(t, maestro.invocations(t), 1)
+}
+
+func TestRun_ReportsMaestroFailingOnARetryThatWritesNoReport(t *testing.T) {
+	maestro := newFakeMaestro(t, flowBFailsReport, "")
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	result, err := s.Run(retryConfig(t, 1), Installation{BinaryPath: maestro.binary})
+	require.Error(t, err)
+	assert.Equal(t, errMaestroFailed+":", firstLine(err), "the retry's failure is not hidden behind the failed flow of the first attempt")
+	assert.Contains(t, errorutil.FormattedError(err), "attempt 2:")
+	assert.Len(t, maestro.invocations(t), 2)
+	assert.Len(t, result.Attempts, 2)
 }
 
 func TestRun_DoesNotRetryByDefault(t *testing.T) {
