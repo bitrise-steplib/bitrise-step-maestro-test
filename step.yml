@@ -125,6 +125,8 @@ inputs:
       JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.
 
       Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.
+
+      A flow found in a `flow_path` folder is skipped by its path inside that folder. If another `flow_path` folder has a file with the same path, that file is skipped too, and the Step logs a warning.
     is_required: false
 
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR
