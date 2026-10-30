@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Define variables",
+    "status": "COMPLETED",
+    "durationMs": 9,
+    "depth": 0
+  },
+  {
+    "name": "Apply configuration",
+    "status": "COMPLETED",
+    "durationMs": 0,
+    "depth": 0
+  },
+  {
+    "name": "Launch app \"com.ivanovsky.passnotes.automation\"",
+    "status": "COMPLETED",
+    "durationMs": 2353,
+    "depth": 0
+  },
+  {
+    "name": "Wait for animation to end",
+    "status": "COMPLETED",
+    "durationMs": 6473,
+    "depth": 0
+  },
+  {
+    "name": "Take screenshot keepassvault-launch",
+    "status": "COMPLETED",
+    "durationMs": 228,
+    "depth": 0
+  }
+]

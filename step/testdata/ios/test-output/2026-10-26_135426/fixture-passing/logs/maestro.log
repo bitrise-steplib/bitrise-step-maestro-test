@@ -1,0 +1,23 @@
+13:55:28.052 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+13:55:28.052 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+13:55:28.053 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:55:28.053 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:55:28.053 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Launch app "org.wikimedia.wikipedia" RUNNING
+13:55:29.701 [ INFO] maestro.Maestro.launchApp$lambda$5: Launching app org.wikimedia.wikipedia
+13:55:29.701 [ INFO] maestro.Maestro.launchApp$lambda$5: Stopping org.wikimedia.wikipedia app during launch
+13:55:31.226 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Launch app "org.wikimedia.wikipedia" COMPLETED
+13:55:31.227 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Wait for animation to end RUNNING
+13:55:31.228 [ INFO] maestro.Maestro.waitForAnimationToEnd$lambda$53: Waiting for animation to end with timeout 15000
+13:55:31.229 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:55:31.229 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:55:31.675 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:55:31.675 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:55:32.745 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:55:32.748 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:55:32.912 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:55:32.912 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:55:33.277 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Wait for animation to end COMPLETED
+13:55:33.280 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Take screenshot wikipedia-launch RUNNING
+13:55:33.297 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:55:33.297 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:55:33.396 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Take screenshot wikipedia-launch COMPLETED

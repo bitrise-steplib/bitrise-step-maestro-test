@@ -1,0 +1,23 @@
+13:53:10.889 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+13:53:10.898 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+13:53:10.899 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:53:10.899 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:53:10.899 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Launch app "com.ivanovsky.passnotes.automation" RUNNING
+13:53:12.729 [ INFO] maestro.Maestro.launchApp$lambda$5: Launching app com.ivanovsky.passnotes.automation
+13:53:12.729 [ INFO] maestro.Maestro.launchApp$lambda$5: Stopping com.ivanovsky.passnotes.automation app during launch
+13:53:13.252 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Launch app "com.ivanovsky.passnotes.automation" COMPLETED
+13:53:13.253 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Wait for animation to end RUNNING
+13:53:13.262 [ INFO] maestro.Maestro.waitForAnimationToEnd$lambda$53: Waiting for animation to end with timeout 15000
+13:53:13.274 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:13.274 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:17.783 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:17.784 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:18.971 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:18.971 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:19.275 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:19.275 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:19.727 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Wait for animation to end COMPLETED
+13:53:19.727 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Take screenshot keepassvault-launch RUNNING
+13:53:19.729 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:53:19.733 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:19.955 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Take screenshot keepassvault-launch COMPLETED
