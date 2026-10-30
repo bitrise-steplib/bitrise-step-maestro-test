@@ -128,6 +128,39 @@ func TestRun_SkipsMaestroWhenEveryFlowIsQuarantined(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(maestro.dir, "invocations"))
 }
 
+func TestRun_SkipsMaestroWhenEveryFlowOfAFolderIsQuarantined(t *testing.T) {
+	folder := t.TempDir()
+	writeFile(t, filepath.Join(folder, "login.yaml"), "appId: org.wikipedia\nname: Login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(folder, "search.yaml"), "appId: org.wikipedia\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	config := retryConfig(t, 0)
+	config.FlowPaths = []string{folder}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Login"}, {TestCaseName: "search"}}
+	result, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+	assert.Empty(t, result.Attempts)
+	assert.NoFileExists(t, filepath.Join(maestro.dir, "invocations"))
+}
+
+func TestRun_RunsMaestroWhenAFlowOfAnotherFolderIsNotQuarantined(t *testing.T) {
+	quarantinedFolder, otherFolder := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(quarantinedFolder, "login.yaml"), "appId: org.wikipedia\nname: Login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(otherFolder, "search.yaml"), "appId: org.wikipedia\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	config := retryConfig(t, 0)
+	config.FlowPaths = []string{quarantinedFolder, otherFolder}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Login"}}
+	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+	require.Len(t, maestro.invocations(t), 1)
+}
+
 func TestConfigFromInput_Quarantined(t *testing.T) {
 	input := testInput()
 	input.Quarantined = `[{"testCaseName":"Login","className":"Login","testSuiteName":["Test Suite"]}]`

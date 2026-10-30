@@ -245,8 +245,8 @@ func (s Step) runMaestro(installation Installation, args []string) error {
 }
 
 // skipQuarantinedFlows leaves the quarantined flows out of the run. A flow file given in flow_path is left out of the
-// command, a flow found in a folder is excluded by a copy of the workspace config. On an error it returns the config
-// unchanged.
+// command, a flow found in a folder is excluded by a copy of the workspace config. When every flow is quarantined it
+// returns no flow paths, as Maestro fails when its patterns match no flow. On an error it returns the config unchanged.
 func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error) {
 	if len(config.Quarantined) == 0 {
 		return config, nil
@@ -271,6 +271,10 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 	for _, flow := range quarantined {
 		s.logger.Printf("- %s (%s)", flow.Name, flow.Path)
 		inFolders = inFolders || flow.Folder != ""
+	}
+	if len(quarantined) == len(flows) {
+		skipped.FlowPaths = nil
+		return skipped, nil
 	}
 	if inFolders {
 		if !excludesFlowsByPattern(config.MaestroVersion) {
