@@ -1,6 +1,7 @@
 package step
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/bitrise-io/go-steputils/v2/testquarantine"
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/env"
+	"github.com/bitrise-io/go-utils/v2/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,6 +161,85 @@ func TestRun_RunsMaestroWhenAFlowOfAnotherFolderIsNotQuarantined(t *testing.T) {
 	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
 	require.NoError(t, err)
 	require.Len(t, maestro.invocations(t), 1)
+}
+
+func TestRun_WarnsWhenAQuarantinePatternMatchesAFlowOfAnotherFolder(t *testing.T) {
+	smoke, regression := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(smoke, "login.yaml"), "appId: org.wikipedia\nname: Smoke login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(regression, "login.yaml"), "appId: org.wikipedia\nname: Regression login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(regression, "search.yaml"), "appId: org.wikipedia\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	var logs bytes.Buffer
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	s.logger = log.NewLogger(log.WithOutput(&logs))
+
+	config := retryConfig(t, 0)
+	config.FlowPaths = []string{smoke, regression}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Smoke login"}}
+	result, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+
+	assert.Contains(t, logs.String(), "Regression login ("+filepath.Join(regression, "login.yaml")+") is not quarantined, but it is skipped too")
+	assert.NotContains(t, logs.String(), "Smoke login ("+filepath.Join(smoke, "login.yaml")+") is not quarantined")
+	assert.Equal(t, "flows:\n  - '*'\n  - '!login.yaml'\n", readFileString(t, filepath.Join(result.WorkDir, "quarantine-config.yaml")), "the pattern is written once")
+}
+
+func TestRun_DoesNotWarnWhenNoOtherFlowMatchesTheQuarantinePattern(t *testing.T) {
+	smoke, regression := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(smoke, "login.yaml"), "appId: org.wikipedia\nname: Smoke login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(regression, "search.yaml"), "appId: org.wikipedia\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	var logs bytes.Buffer
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	s.logger = log.NewLogger(log.WithOutput(&logs))
+
+	config := retryConfig(t, 0)
+	config.FlowPaths = []string{smoke, regression}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Smoke login"}}
+	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+
+	assert.NotContains(t, logs.String(), "is not quarantined")
+}
+
+func TestRun_DoesNotWarnAboutPatternMatchesWhenMaestroIgnoresThePatterns(t *testing.T) {
+	smoke, regression := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(smoke, "login.yaml"), "appId: org.wikipedia\nname: Smoke login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(regression, "login.yaml"), "appId: org.wikipedia\nname: Regression login\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	var logs bytes.Buffer
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	s.logger = log.NewLogger(log.WithOutput(&logs))
+
+	config := retryConfig(t, 0)
+	config.MaestroVersion = "2.8.0"
+	config.FlowPaths = []string{smoke, regression}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Smoke login"}}
+	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+
+	assert.NotContains(t, logs.String(), "is not quarantined")
+	require.Len(t, maestro.invocations(t), 1, "no flow is skipped, so Maestro runs")
+}
+
+func TestRun_SkipsMaestroWhenQuarantinePatternsLeaveNoFlow(t *testing.T) {
+	smoke, regression := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(smoke, "login.yaml"), "appId: org.wikipedia\nname: Smoke login\n---\n- launchApp\n")
+	writeFile(t, filepath.Join(regression, "login.yaml"), "appId: org.wikipedia\nname: Regression login\n---\n- launchApp\n")
+	maestro := newFakeMaestro(t, flowBPassesReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	config := retryConfig(t, 0)
+	config.FlowPaths = []string{smoke, regression}
+	config.Quarantined = []testquarantine.QuarantinedTest{{TestCaseName: "Smoke login"}}
+	result, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+	assert.Empty(t, result.Attempts)
+	assert.NoFileExists(t, filepath.Join(maestro.dir, "invocations"))
 }
 
 func TestConfigFromInput_Quarantined(t *testing.T) {

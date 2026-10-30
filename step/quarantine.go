@@ -103,6 +103,36 @@ func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flow
 	return matched
 }
 
+// patternMatchedFlows returns the flows that are not quarantined, but that the exclusion pattern of a quarantined flow
+// found in a folder matches too. Maestro applies a pattern to the path inside every flow_path folder.
+func patternMatchedFlows(quarantined, flows []flowFile) []flowFile {
+	excluded := map[string]bool{}
+	for _, flow := range quarantined {
+		if rel, ok := pathInFolder(flow); ok {
+			excluded[rel] = true
+		}
+	}
+
+	var matched []flowFile
+	for _, flow := range flows {
+		if slices.ContainsFunc(quarantined, func(other flowFile) bool { return other.Path == flow.Path }) {
+			continue
+		}
+		if rel, ok := pathInFolder(flow); ok && excluded[rel] {
+			matched = append(matched, flow)
+		}
+	}
+	return matched
+}
+
+func pathInFolder(flow flowFile) (string, bool) {
+	if flow.Folder == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(flow.Folder, flow.Path)
+	return filepath.ToSlash(rel), err == nil
+}
+
 // writeQuarantineConfig writes a copy of the workspace config whose flows patterns leave out the quarantined flows
 // found in folders. baseConfig is empty when the flows have no workspace config.
 func writeQuarantineConfig(baseConfig, dst string, quarantined []flowFile) error {

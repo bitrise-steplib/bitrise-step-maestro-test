@@ -272,7 +272,14 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 		s.logger.Printf("- %s (%s)", flow.Name, flow.Path)
 		inFolders = inFolders || flow.Folder != ""
 	}
-	if len(quarantined) == len(flows) {
+	var alsoSkipped []flowFile
+	if excludesFlowsByPattern(config.MaestroVersion) {
+		alsoSkipped = patternMatchedFlows(quarantined, flows)
+	}
+	for _, flow := range alsoSkipped {
+		s.logger.Warnf("%s (%s) is not quarantined, but it is skipped too: the pattern that skips a quarantined flow matches it in another flow_path folder.", flow.Name, flow.Path)
+	}
+	if len(quarantined)+len(alsoSkipped) == len(flows) {
 		skipped.FlowPaths = nil
 		return skipped, nil
 	}
