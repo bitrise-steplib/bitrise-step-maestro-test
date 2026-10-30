@@ -1,0 +1,33 @@
+13:53:21.927 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Define variables RUNNING
+13:53:21.929 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Define variables COMPLETED
+13:53:21.930 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:53:21.930 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:53:21.930 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Run helpers/launch.yaml RUNNING
+13:53:21.931 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Apply configuration RUNNING
+13:53:21.931 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Apply configuration COMPLETED
+13:53:21.931 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Launch app "com.ivanovsky.passnotes.automation" RUNNING
+13:53:23.216 [ INFO] maestro.Maestro.launchApp$lambda$5: Launching app com.ivanovsky.passnotes.automation
+13:53:23.216 [ INFO] maestro.Maestro.launchApp$lambda$5: Stopping com.ivanovsky.passnotes.automation app during launch
+13:53:23.948 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Launch app "com.ivanovsky.passnotes.automation" COMPLETED
+13:53:23.948 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Wait for animation to end RUNNING
+13:53:23.950 [ INFO] maestro.Maestro.waitForAnimationToEnd$lambda$53: Waiting for animation to end with timeout 15000
+13:53:23.950 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:23.956 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:25.101 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:25.102 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:26.278 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:26.278 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:26.882 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+13:53:26.883 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:27.944 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Wait for animation to end COMPLETED
+13:53:27.945 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Run helpers/launch.yaml COMPLETED
+13:53:27.946 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Tap on (Optional) "Button that does not exist" RUNNING
+13:53:35.929 [ INFO] maestro.orchestra.Orchestra.executeCommands: [Command execution] CommandWarned: Element not found: Text matching regex: Button that does not exist
+13:53:36.666 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:53:36.667 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:36.868 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Tap on (Optional) "Button that does not exist" WARNED
+13:53:36.869 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandStart: Assert that "Text that is not on the screen" is visible RUNNING
+13:53:45.514 [ERROR] maestro.orchestra.Orchestra.executeCommands: [Command execution] CommandFailed: Assertion is false: "Text that is not on the screen" is visible
+13:53:45.673 [ INFO] maestro.Maestro.takeScreenshot: Taking screenshot
+13:53:45.674 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+13:53:45.956 [ INFO] maestro.cli.runner.CliConsoleListener.onCommandFinished: Assert that "Text that is not on the screen" is visible FAILED

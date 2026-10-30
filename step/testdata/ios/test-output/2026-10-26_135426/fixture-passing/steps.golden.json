@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Define variables",
+    "status": "COMPLETED",
+    "durationMs": 0,
+    "depth": 0
+  },
+  {
+    "name": "Apply configuration",
+    "status": "COMPLETED",
+    "durationMs": 0,
+    "depth": 0
+  },
+  {
+    "name": "Launch app \"org.wikimedia.wikipedia\"",
+    "status": "COMPLETED",
+    "durationMs": 3173,
+    "depth": 0
+  },
+  {
+    "name": "Wait for animation to end",
+    "status": "COMPLETED",
+    "durationMs": 2049,
+    "depth": 0
+  },
+  {
+    "name": "Take screenshot wikipedia-launch",
+    "status": "COMPLETED",
+    "durationMs": 119,
+    "depth": 0
+  }
+]
