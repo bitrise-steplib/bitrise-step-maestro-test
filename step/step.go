@@ -391,6 +391,20 @@ func (s Step) exportReport(config Config, result Result) error {
 	return nil
 }
 
+// addStepLists puts the step list of each linked flow into its test case. It has to run before the attempts are merged,
+// as merging copies the test cases.
+func (s Step) addStepLists(link attachmentLinkResult) {
+	for _, folder := range slices.Sorted(maps.Keys(link.Linked)) {
+		bundle := link.Linked[folder]
+		steps, err := readFlowSteps(bundle.Dir)
+		if err != nil {
+			s.logger.Warnf("The step list of Maestro output folder %q is not added: %s", folder, err)
+			continue
+		}
+		addStepList(bundle.TestCase, steps)
+	}
+}
+
 func (s Step) mergedReport(attempts []Attempt) (testreport.TestReport, map[string]flowBundle, bool) {
 	var reports []testreport.TestReport
 	linked := map[string]flowBundle{}
@@ -410,6 +424,7 @@ func (s Step) mergedReport(attempts []Attempt) (testreport.TestReport, map[strin
 			for _, warning := range link.Warnings {
 				s.logger.Warnf("%s", warning)
 			}
+			s.addStepLists(link)
 			maps.Copy(linked, link.Linked)
 		}
 		reports = append(reports, report)

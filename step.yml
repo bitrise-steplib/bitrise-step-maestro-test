@@ -4,7 +4,7 @@ description: |-
   Runs your [Maestro](https://maestro.dev) flows locally on the build machine and exports the results.
 
   The Step installs the Maestro CLI, installs your app on the device, runs `maestro test`, and exports:
-  - the results to the Test Reports page, with each flow's screenshots, `startRecording` videos and logs attached to its test case
+  - the results to the Test Reports page, with each flow's screenshots, `startRecording` videos and logs attached to its test case, and the commands the flow ran as a step list in the test case's output
   - the Maestro test output folder as a zip artifact
 
   Add **Deploy to Bitrise.io** after this Step to upload the results.

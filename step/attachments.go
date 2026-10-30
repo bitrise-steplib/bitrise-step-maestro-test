@@ -39,16 +39,19 @@ type artifactManifest struct {
 	} `json:"entries"`
 }
 
-// flowBundle is one flow's Maestro output folder and the attachable files in it, relative to the folder.
+// flowBundle is one flow's Maestro output folder and the attachable files in it, relative to the folder. The files
+// can be empty, the folder still has the flow's commands.
 type flowBundle struct {
 	Dir   string
 	Files []string
 	// AttemptDir is the attempt's folder the files are exported under, relative to the report.
 	AttemptDir string
+	// TestCase is the flow's test case in the report, set when the bundle is linked to it.
+	TestCase *testreport.TestCase
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
-// keyed by folder name.
+// keyed by folder name. A folder without attachable files is included too, because its flow still gets a step list.
 func findFlowBundles(testOutputDir, attemptDir string) (map[string]flowBundle, error) {
 	manifests, err := filepath.Glob(filepath.Join(testOutputDir, "*", "*", manifestFileName))
 	if err != nil {
@@ -62,9 +65,7 @@ func findFlowBundles(testOutputDir, attemptDir string) (map[string]flowBundle, e
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 		}
-		if len(files) > 0 {
-			bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files, AttemptDir: attemptDir}
-		}
+		bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files, AttemptDir: attemptDir}
 	}
 	return bundles, nil
 }
@@ -121,8 +122,8 @@ type attachmentLinkResult struct {
 	Warnings []string
 }
 
-// linkAttachments adds an attachment_N property per bundle file to the test case of the flow. The value
-// is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
+// linkAttachments matches each flow folder to its test case, and adds an attachment_N property per bundle file to it.
+// The value is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
 func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle) attachmentLinkResult {
 	testCasesByFolder := map[string][]*testreport.TestCase{}
 	forEachTestCase(report, func(testCase *testreport.TestCase) {
@@ -133,23 +134,24 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
 		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files are not attached", testCasesByFolder[prefix][0].Name, folder))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
 			continue
 		}
 
 		testCases := testCasesByFolder[folder]
 		switch {
 		case len(testCases) == 0:
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files are not attached", folder))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files and step list are not added", folder))
 			continue
 		case len(testCases) > 1:
-			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, their files are not attached", testCases[0].Name))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, their files and step lists are not added", testCases[0].Name))
 			continue
 		}
 
 		bundle := bundles[folder]
 		exportDir := path.Join(bundle.AttemptDir, folder)
 		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
+		bundle.TestCase = testCases[0]
 		result.Linked[exportDir] = bundle
 	}
 	return result

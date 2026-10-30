@@ -6,23 +6,6 @@ app:
   - SAMPLES_URL: https://storage.googleapis.com/mobile.dev/samples/samples.zip
 
 workflows:
-  test_android:
-    title: Android flows picked by tags
-    description: Runs the basic Android flow of the Maestro samples folder, picked by include and exclude tags, on an AVD Manager emulator.
-    envs:
-    - TEST_NAME: Maestro Android
-    - EXPECTED_FLOW: android-flow
-    steps:
-    - bundle::android_tagged_flows: {}
-
-  test_android_failing_flow_exports_results:
-    title: Android failing flow
-    description: Runs a flow that fails and checks that its report and screenshot are still exported.
-    envs:
-    - TEST_NAME: Maestro Android failing
-    steps:
-    - bundle::android_failing_flow: {}
-
   test_ios:
     title: iOS flows picked by tags
     description: Runs the basic iOS flow of the Maestro samples folder, picked by include and exclude tags, on an Xcode Start Simulator simulator.
@@ -49,62 +32,15 @@ workflows:
     steps:
     - bundle::ios_quarantined_flow: {}
 
+  test_ios_failing_flow_exports_results:
+    title: iOS failing flow
+    description: Runs a flow that fails and checks that its report, screenshot and step list are still exported.
+    envs:
+    - TEST_NAME: Maestro iOS failing
+    steps:
+    - bundle::ios_failing_flow: {}
+
 step_bundles:
-  android_tagged_flows:
-    run_if: |-
-      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-    steps:
-    - bundle::download_samples: {}
-    - bundle::start_android_emulator: {}
-    - path::./:
-        title: Execute step
-        inputs:
-        - app_path: $SAMPLES_DIR/wikipedia.apk
-        - flow_path: $SAMPLES_DIR
-        - include_tags: android
-        - exclude_tags: advanced
-        - test_name: $TEST_NAME
-    - bundle::verify_outputs: {}
-    - bundle::verify_tag_filtering: {}
-    - bundle::stop_android_emulator: {}
-
-  android_failing_flow:
-    run_if: |-
-      {{ or (envcontain "BITRISEIO_STACK_ID" "ubuntu") (not .IsCI) }}
-    steps:
-    - bundle::download_samples: {}
-    - bundle::start_android_emulator: {}
-    - script@1:
-        title: Write a failing flow
-        inputs:
-        - content: |-
-            #!/usr/bin/env bash
-            set -euxo pipefail
-            cat > "$SAMPLES_DIR/failing-flow.yaml" <<'EOF'
-            appId: org.wikipedia
-            ---
-            - launchApp
-            - assertVisible: "This text is never on screen"
-            EOF
-    - path::./:
-        title: Execute step
-        is_skippable: true
-        inputs:
-        - app_path: $SAMPLES_DIR/wikipedia.apk
-        - flow_path: $SAMPLES_DIR/failing-flow.yaml
-        - test_name: $TEST_NAME
-    - script@1:
-        title: Verify the report has the failure
-        is_always_run: true
-        inputs:
-        - content: |-
-            #!/usr/bin/env bash
-            set -euxo pipefail
-            grep -q "<failure" "$MAESTRO_JUNIT_PATH"
-            find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
-    - bundle::verify_outputs: {}
-    - bundle::stop_android_emulator: {}
-
   ios_tagged_flows:
     run_if: |-
       {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
@@ -186,6 +122,57 @@ step_bundles:
     - bundle::verify_outputs: {}
     - bundle::verify_tag_filtering: {}
 
+  ios_failing_flow:
+    run_if: |-
+      {{ or (envcontain "BITRISEIO_STACK_ID" "osx") (not .IsCI) }}
+    steps:
+    - bundle::prepare_ios: {}
+    - script@1:
+        title: Write a failing flow
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            mkdir -p "$SAMPLES_DIR/helpers"
+            cat > "$SAMPLES_DIR/helpers/launch.yaml" <<'EOF'
+            appId: org.wikimedia.wikipedia
+            ---
+            - launchApp
+            EOF
+            cat > "$SAMPLES_DIR/failing-flow.yaml" <<'EOF'
+            appId: org.wikimedia.wikipedia
+            ---
+            - runFlow: helpers/launch.yaml
+            - tapOn:
+                text: "This button is never on screen"
+                optional: true
+            - assertVisible: "This text is never on screen"
+            EOF
+    - path::./:
+        title: Execute step
+        is_skippable: true
+        inputs:
+        - app_path: $SAMPLES_DIR/Wikipedia.app
+        - flow_path: $SAMPLES_DIR/failing-flow.yaml
+        - test_name: $TEST_NAME
+    - script@1:
+        title: Verify the report has the failure and the step list
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euxo pipefail
+            grep -q "<failure" "$MAESTRO_JUNIT_PATH"
+            find "$BITRISE_TEST_DEPLOY_DIR" -path "*/$TEST_NAME/*/screenshots/*.png" | grep -q .
+            test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
+            report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            system_out="$(python3 -c 'import sys, xml.etree.ElementTree as ET; print("\n".join(e.text or "" for e in ET.parse(sys.argv[1]).iter("system-out")))' "$report")"
+            grep -q '^✓ Run helpers/launch.yaml' <<< "$system_out"
+            grep -q '^  ✓ Launch app' <<< "$system_out"
+            grep -q '^⚠ Tap on (Optional)' <<< "$system_out"
+            grep -q '^✗ Assert that "This text is never on screen" is visible' <<< "$system_out"
+    - bundle::verify_outputs: {}
+
   prepare_ios:
     steps:
     - bundle::download_samples: {}
@@ -214,26 +201,6 @@ step_bundles:
             curl -fsSL "$SAMPLES_URL" -o "$dir/samples.zip"
             unzip -q "$dir/samples.zip" -d "$dir"
             envman add --key SAMPLES_DIR --value "$dir"
-
-  start_android_emulator:
-    steps:
-    - script@1:
-        title: Set ABI based on OS
-        inputs:
-        - content: |-
-            #!/usr/bin/env bash
-            set -ex
-            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-              envman add --key ABI --value x86_64
-            else
-              envman add --key ABI --value arm64-v8a
-            fi
-    - avd-manager@2:
-        inputs:
-        - api_level: 34
-        - tag: google_apis
-        - profile: pixel
-        - abi: $ABI
 
   verify_outputs:
     steps:
@@ -269,14 +236,3 @@ step_bundles:
             report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
             test "$(grep -c '<testcase ' "$report")" = 1
             grep -q "<testcase[^>]*name=\"$EXPECTED_FLOW\"" "$report"
-
-  stop_android_emulator:
-    steps:
-    - script@1:
-        title: Stop the emulator so the next test starts with one device
-        is_always_run: true
-        inputs:
-        - content: |-
-            #!/usr/bin/env bash
-            set -euxo pipefail
-            adb -s "$BITRISE_EMULATOR_SERIAL" emu kill

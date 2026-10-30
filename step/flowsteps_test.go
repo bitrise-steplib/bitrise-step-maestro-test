@@ -236,6 +236,9 @@ type testCommand struct {
 	// evaluatedCommand is the raw JSON of metadata.evaluatedCommand, left out when empty.
 	evaluatedCommand string
 
+	duration     int64
+	errorMessage string
+
 	skipInLog bool
 }
 
@@ -249,12 +252,20 @@ func writeFlowFiles(t *testing.T, flowDir string, commands ...testCommand) {
 		if raw == "" {
 			raw = "{}"
 		}
+		duration := command.duration
+		if duration == 0 {
+			duration = 1
+		}
+		errorField := ""
+		if command.errorMessage != "" {
+			errorField = fmt.Sprintf(`, "error": {"message": %q}`, command.errorMessage)
+		}
 		evaluated := ""
 		if command.evaluatedCommand != "" {
 			evaluated = fmt.Sprintf(`, "evaluatedCommand": %s`, command.evaluatedCommand)
 		}
-		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, "duration": 1, "depth": %d%s}}`,
-			raw, command.status, command.depth, evaluated))
+		records = append(records, fmt.Sprintf(`{"command": %s, "metadata": {"status": %q, "duration": %d, "depth": %d%s%s}}`,
+			raw, command.status, duration, command.depth, errorField, evaluated))
 
 		if !command.skipInLog {
 			logLines = append(logLines,
