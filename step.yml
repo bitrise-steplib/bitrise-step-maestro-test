@@ -81,6 +81,19 @@ inputs:
     summary: The name the results are shown under on the Test Reports page.
     is_required: true
 
+- num_flaky_test_attempts: "0"
+  opts:
+    title: Number of times a failed flow is reattempted
+    summary: Specifies the number of times a failed flow should be reattempted.
+    description: |-
+      Specifies the number of times a failed flow should be reattempted. Only the failed flows run again, with the same tags and arguments.
+
+      A flow that initially fails but succeeds on any reattempt is reported as flaky and does not fail the Step.
+      The maximum number of reruns allowed is 10. (Default: 0, which implies no reruns.)
+
+      Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
+    is_required: true
+
 - maestro_version: 2.11.0
   opts:
     category: Debugging
@@ -103,6 +116,19 @@ inputs:
       Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`.
     is_required: false
 
+- quarantined_tests: $BITRISE_QUARANTINED_TESTS_JSON
+  opts:
+    category: Debugging
+    title: Quarantined tests
+    summary: JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.
+    description: |-
+      JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.
+
+      Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.
+
+      A flow found in a `flow_path` folder is skipped by its path inside that folder. If another `flow_path` folder has a file with the same path, that file is skipped too, and the Step logs a warning.
+    is_required: false
+
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR
   opts:
     category: Debugging
@@ -115,9 +141,9 @@ outputs:
 - MAESTRO_JUNIT_PATH:
   opts:
     title: JUnit report path
-    summary: Path to the JUnit report written by Maestro.
+    summary: Path to the JUnit report of the flows, with every run of a retried flow.
 
 - MAESTRO_TEST_OUTPUT_ZIP_PATH:
   opts:
     title: Test output zip path
-    summary: Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory.
+    summary: Path to the zipped Maestro output in the deploy directory, one attempt-N folder per run with its screenshots, logs, recordings and JUnit report.

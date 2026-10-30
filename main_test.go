@@ -31,7 +31,7 @@ func (f *fakeRunner) InstallDependencies(step.Config) (step.Installation, error)
 
 func (f *fakeRunner) Run(step.Config, step.Installation) (step.Result, error) {
 	f.calls = append(f.calls, "Run")
-	return step.Result{JUnitPath: "report.xml"}, f.runErr
+	return step.Result{WorkDir: "work"}, f.runErr
 }
 
 func (f *fakeRunner) ExportOutputs(_ step.Config, result step.Result) error {
@@ -56,7 +56,7 @@ func TestRunPhases_ExportsOutputsWhenFlowsFail(t *testing.T) {
 
 	assert.Equal(t, exitcode.Failure, code)
 	assert.Equal(t, []string{"ProcessConfig", "InstallDependencies", "Run", "ExportOutputs"}, r.calls)
-	assert.Equal(t, "report.xml", r.exported.JUnitPath)
+	assert.Equal(t, "work", r.exported.WorkDir)
 }
 
 func TestRunPhases_LogsTheRunErrorLastWhenTheExportAlsoFails(t *testing.T) {

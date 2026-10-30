@@ -1,6 +1,7 @@
 package step
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,11 +32,8 @@ const maestroJUnitReport = `<?xml version='1.0' encoding='UTF-8'?>
 `
 
 func TestExportOutputs_LinksFlowArtifactsToTestCases(t *testing.T) {
-	workDir := t.TempDir()
-	junitPath := filepath.Join(workDir, junitReportFileName)
-	writeFile(t, junitPath, maestroJUnitReport)
-
-	runDir := filepath.Join(workDir, testOutputDirectoryName, "2026-10-02_101146")
+	result := singleAttemptResult(t, maestroJUnitReport)
+	runDir := filepath.Join(result.Attempts[0].TestOutputDir, "2026-10-02_101146")
 	writeFlowBundle(t, filepath.Join(runDir, "Flow A"), `{"entries":[
 		{"kind":"COMMAND_METADATA","format":"JSON","relativePath":"commands.json"},
 		{"kind":"MAESTRO_LOG","format":"TXT","relativePath":"logs/maestro.log"}
@@ -60,10 +58,7 @@ func TestExportOutputs_LinksFlowArtifactsToTestCases(t *testing.T) {
 
 	testResultDir := t.TempDir()
 	s := testStep()
-	err := s.ExportOutputs(
-		Config{TestName: "Maestro", TestResultDir: testResultDir},
-		Result{JUnitPath: junitPath, TestOutputDir: filepath.Join(workDir, testOutputDirectoryName)},
-	)
+	err := s.ExportOutputs(Config{TestName: "Maestro", TestResultDir: testResultDir}, result)
 	require.NoError(t, err)
 
 	testRunDir := filepath.Join(testResultDir, "Maestro")
@@ -72,14 +67,14 @@ func TestExportOutputs_LinksFlowArtifactsToTestCases(t *testing.T) {
 	report := convertReport(t, filepath.Join(testRunDir, junitReportFileName))
 	attachments := attachmentsByTestCase(report)
 	assert.Equal(t, map[string][]string{
-		"Flow A": {"Flow A/logs/maestro.log"},
+		"Flow A": {"attempt-1/Flow A/logs/maestro.log"},
 		"Flow B": {
-			"Flow B/logs/device-logcat.txt",
-			"Flow B/logs/maestro.log",
-			"Flow B/screenshots/step-003-assertVisible.png",
-			"Flow B/takeScreenshot/login/home.png",
+			"attempt-1/Flow B/logs/device-logcat.txt",
+			"attempt-1/Flow B/logs/maestro.log",
+			"attempt-1/Flow B/screenshots/step-003-assertVisible.png",
+			"attempt-1/Flow B/takeScreenshot/login/home.png",
 		},
-		"Login/Happy path": {"Login_Happy path/logs/maestro.log"},
+		"Login/Happy path": {"attempt-1/Login_Happy path/logs/maestro.log"},
 	}, attachments)
 
 	for _, values := range attachments {
@@ -87,50 +82,47 @@ func TestExportOutputs_LinksFlowArtifactsToTestCases(t *testing.T) {
 			assert.FileExists(t, filepath.Join(testRunDir, value), "attachment values are relative to the report's folder")
 		}
 	}
-	assert.NoFileExists(t, filepath.Join(testRunDir, "Flow B", "commands.json"))
-	assert.NoFileExists(t, filepath.Join(testRunDir, "Flow B", "screen-hierarchy", "step-3.json"))
-	assert.NoDirExists(t, filepath.Join(testRunDir, "Flow B-2"))
+	assert.NoFileExists(t, filepath.Join(testRunDir, "attempt-1", "Flow B", "commands.json"))
+	assert.NoFileExists(t, filepath.Join(testRunDir, "attempt-1", "Flow B", "screen-hierarchy", "step-3.json"))
+	assert.NoDirExists(t, filepath.Join(testRunDir, "attempt-1", "Flow B-2"))
 
 	flowB := findTestCase(t, report, "Flow B")
 	require.NotNil(t, flowB.Failure)
 	assert.Contains(t, flowB.Failure.Value, `"Welcome" is visible`)
 	assert.Equal(t, "smoke", propertyValue(findTestCase(t, report, "Login/Happy path"), "tags"))
 
-	original := convertReport(t, junitPath)
+	original := convertReport(t, result.Attempts[0].JUnitPath)
 	assert.Empty(t, attachmentsByTestCase(original), "the Maestro report itself is left untouched")
 }
 
-func TestExportOutputs_NoBundlesExportsOriginalReport(t *testing.T) {
-	workDir := t.TempDir()
-	junitPath := filepath.Join(workDir, junitReportFileName)
-	writeFile(t, junitPath, maestroJUnitReport)
-
+func TestExportOutputs_WithoutMaestroOutput(t *testing.T) {
 	testResultDir := t.TempDir()
-	err := testStep().ExportOutputs(
-		Config{TestName: "Maestro", TestResultDir: testResultDir},
-		Result{JUnitPath: junitPath, TestOutputDir: filepath.Join(workDir, testOutputDirectoryName)},
-	)
+	err := testStep().ExportOutputs(Config{TestName: "Maestro", TestResultDir: testResultDir}, singleAttemptResult(t, maestroJUnitReport))
 	require.NoError(t, err)
 
-	exported, err := os.ReadFile(filepath.Join(testResultDir, "Maestro", junitReportFileName))
-	require.NoError(t, err)
-	assert.Equal(t, maestroJUnitReport, string(exported))
+	report := convertReport(t, filepath.Join(testResultDir, "Maestro", junitReportFileName))
+	assert.Equal(t, []string{"Flow A", "Flow B", "Login/Happy path"}, testCaseNames(report))
+	assert.Empty(t, attachmentsByTestCase(report))
 
 	testInfo, err := os.ReadFile(filepath.Join(testResultDir, "Maestro", "test-info.json"))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"test-name":"Maestro"}`, string(testInfo), "the deploy step names the test run from test-info.json")
 }
 
-func TestExportOutputs_TestNameWithPathSeparator(t *testing.T) {
-	workDir := t.TempDir()
-	junitPath := filepath.Join(workDir, junitReportFileName)
-	writeFile(t, junitPath, maestroJUnitReport)
+func TestExportOutputs_WarnsWhenTheReportDoesNotParse(t *testing.T) {
+	var logs bytes.Buffer
+	s := testStep()
+	s.logger = log.NewLogger(log.WithOutput(&logs))
 
+	truncated := maestroJUnitReport[:strings.Index(maestroJUnitReport, "</testsuite>")]
+	err := s.ExportOutputs(Config{TestName: "Maestro", TestResultDir: t.TempDir()}, singleAttemptResult(t, truncated))
+	require.NoError(t, err)
+	assert.Contains(t, logs.String(), "The JUnit report of attempt-1 is not exported: XML syntax error")
+}
+
+func TestExportOutputs_TestNameWithPathSeparator(t *testing.T) {
 	testResultDir := t.TempDir()
-	err := testStep().ExportOutputs(
-		Config{TestName: "Maestro/Pixel: smoke", TestResultDir: testResultDir},
-		Result{JUnitPath: junitPath, TestOutputDir: filepath.Join(workDir, testOutputDirectoryName)},
-	)
+	err := testStep().ExportOutputs(Config{TestName: "Maestro/Pixel: smoke", TestResultDir: testResultDir}, singleAttemptResult(t, maestroJUnitReport))
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(testResultDir)
@@ -243,6 +235,15 @@ func (fakeExporter) ExportOutputFilesZip(string, []string, string) error { retur
 
 func testStep() Step {
 	return Step{logger: log.NewLogger(), exporter: fakeExporter{}, fileManager: fileutil.NewFileManager()}
+}
+
+// singleAttemptResult returns the result of a run whose only attempt wrote the given report.
+func singleAttemptResult(t *testing.T, report string) Result {
+	workDir := t.TempDir()
+	attempt, err := newAttempt(workDir, 1)
+	require.NoError(t, err)
+	writeFile(t, attempt.JUnitPath, report)
+	return Result{WorkDir: workDir, Attempts: []Attempt{attempt}}
 }
 
 func writeFlowBundle(t *testing.T, flowDir, manifest string, files ...string) {

@@ -2,11 +2,12 @@
 ## explicit; go 1.22
 github.com/bitrise-io/go-android/v2/sdk
 github.com/bitrise-io/go-android/v2/testresult/junitxml
-# github.com/bitrise-io/go-steputils/v2 v2.0.0-alpha.61
+# github.com/bitrise-io/go-steputils/v2 v2.0.0-alpha.64
 ## explicit; go 1.21
 github.com/bitrise-io/go-steputils/v2/export
 github.com/bitrise-io/go-steputils/v2/stepconf
 github.com/bitrise-io/go-steputils/v2/testasset
+github.com/bitrise-io/go-steputils/v2/testquarantine
 github.com/bitrise-io/go-steputils/v2/testreport
 # github.com/bitrise-io/go-utils/v2 v2.0.0-alpha.39
 ## explicit; go 1.21

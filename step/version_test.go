@@ -7,6 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExcludesFlowsByPattern(t *testing.T) {
+	assert.False(t, excludesFlowsByPattern("2.8.0"))
+	assert.True(t, excludesFlowsByPattern("2.9.0"))
+	assert.True(t, excludesFlowsByPattern("2.11.0"))
+}
+
 func TestResolveMaestroVersion(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -2,6 +2,7 @@ package step
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -61,8 +62,11 @@ func splitArgs(input string) ([]string, error) {
 	return shellquote.Split(input)
 }
 
-func testArgs(config Config, result Result) []string {
-	args := []string{"test", "--platform", string(config.App.Platform), "--format", "junit", "--output", result.JUnitPath, "--test-output-dir", result.TestOutputDir}
+func testArgs(config Config, attempt Attempt, flowPaths []string) []string {
+	args := []string{"test", "--platform", string(config.App.Platform), "--format", "junit", "--output", attempt.JUnitPath, "--test-output-dir", attempt.TestOutputDir}
+	if config.WorkspaceConfig != "" {
+		args = append(args, "--config", config.WorkspaceConfig)
+	}
 	if len(config.IncludeTags) > 0 {
 		args = append(args, "--include-tags", strings.Join(config.IncludeTags, ","))
 	}
@@ -70,7 +74,64 @@ func testArgs(config Config, result Result) []string {
 		args = append(args, "--exclude-tags", strings.Join(config.ExcludeTags, ","))
 	}
 	args = append(args, config.AdditionalArgs...)
-	return append(args, config.FlowPaths...)
+	return append(args, flowPaths...)
+}
+
+// workspaceConfigPath returns the config.yaml (config.yml) of the first flow folder that has one, the way Maestro
+// finds it. It returns none when additional_args passes --config.
+func workspaceConfigPath(flowPaths, additionalArgs []string) string {
+	if _, ok := configArgValue(additionalArgs); ok {
+		return ""
+	}
+	for _, flowPath := range flowPaths {
+		if info, err := os.Stat(flowPath); err != nil || !info.IsDir() {
+			continue
+		}
+		for _, name := range []string{"config.yaml", "config.yml"} {
+			if pth := filepath.Join(flowPath, name); exists(pth) {
+				return pth
+			}
+		}
+	}
+	return ""
+}
+
+// workspaceConfig returns the workspace config Maestro reads: the one additional_args gives with --config, otherwise
+// the flow folder's.
+func workspaceConfig(config Config) string {
+	if userConfig, ok := configArgValue(config.AdditionalArgs); ok {
+		return userConfig
+	}
+	return config.WorkspaceConfig
+}
+
+func configArgValue(args []string) (string, bool) {
+	for i, arg := range args {
+		if arg == "--config" {
+			if i+1 < len(args) {
+				return args[i+1], true
+			}
+			return "", true
+		}
+		if value, ok := strings.CutPrefix(arg, "--config="); ok {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func withoutConfigArg(args []string) []string {
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--config":
+			i++
+		case strings.HasPrefix(args[i], "--config="):
+		default:
+			kept = append(kept, args[i])
+		}
+	}
+	return kept
 }
 
 func installAppCommand(app App, deviceID, sdkDir string) (string, []string) {

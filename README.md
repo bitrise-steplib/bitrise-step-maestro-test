@@ -121,8 +121,10 @@ workflows:
 | `include_tags` | Run only the flows that have at least one of these tags (comma or newline separated). |  |  |
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
+| `num_flaky_test_attempts` | Specifies the number of times a failed flow should be reattempted. Only the failed flows run again, with the same tags and arguments.  A flow that initially fails but succeeds on any reattempt is reported as flaky and does not fail the Step. The maximum number of reruns allowed is 10. (Default: 0, which implies no reruns.)  Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`. | required | `0` |
 | `maestro_version` | The Maestro CLI version to install. The default is the version this Step release was tested with.  Change it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. | required | `2.11.0` |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`. |  |  |
+| `quarantined_tests` | JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.  Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.  A flow found in a `flow_path` folder is skipped by its path inside that folder. If another `flow_path` folder has a file with the same path, that file is skipped too, and the Step logs a warning. |  | `$BITRISE_QUARANTINED_TESTS_JSON` |
 | `bitrise_test_result_dir` | The per-step folder the Bitrise CLI creates for test results. | required | `$BITRISE_TEST_RESULT_DIR` |
 </details>
 
@@ -131,8 +133,8 @@ workflows:
 
 | Environment Variable | Description |
 | --- | --- |
-| `MAESTRO_JUNIT_PATH` | Path to the JUnit report written by Maestro. |
-| `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro test output folder (screenshots, logs, recordings) in the deploy directory. |
+| `MAESTRO_JUNIT_PATH` | Path to the JUnit report of the flows, with every run of a retried flow. |
+| `MAESTRO_TEST_OUTPUT_ZIP_PATH` | Path to the zipped Maestro output in the deploy directory, one attempt-N folder per run with its screenshots, logs, recordings and JUnit report. |
 </details>
 
 ## 🙋 Contributing

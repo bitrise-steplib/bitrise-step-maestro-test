@@ -43,11 +43,13 @@ type artifactManifest struct {
 type flowBundle struct {
 	Dir   string
 	Files []string
+	// AttemptDir is the attempt's folder the files are exported under, relative to the report.
+	AttemptDir string
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
 // keyed by folder name.
-func findFlowBundles(testOutputDir string) (map[string]flowBundle, error) {
+func findFlowBundles(testOutputDir, attemptDir string) (map[string]flowBundle, error) {
 	manifests, err := filepath.Glob(filepath.Join(testOutputDir, "*", "*", manifestFileName))
 	if err != nil {
 		return nil, err
@@ -61,7 +63,7 @@ func findFlowBundles(testOutputDir string) (map[string]flowBundle, error) {
 			return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 		}
 		if len(files) > 0 {
-			bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files}
+			bundles[filepath.Base(flowDir)] = flowBundle{Dir: flowDir, Files: files, AttemptDir: attemptDir}
 		}
 	}
 	return bundles, nil
@@ -114,13 +116,13 @@ func attachableFiles(flowDir string) ([]string, error) {
 }
 
 type attachmentLinkResult struct {
-	// Linked maps a flow folder name to the bundle whose files are referenced from the report.
+	// Linked maps the folder a bundle's files are exported to, relative to the report, to the bundle.
 	Linked   map[string]flowBundle
 	Warnings []string
 }
 
 // linkAttachments adds an attachment_N property per bundle file to the test case of the flow. The value
-// is the file's path relative to the report's folder: <flow folder>/<path inside the flow folder>.
+// is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
 func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle) attachmentLinkResult {
 	testCasesByFolder := map[string][]*testreport.TestCase{}
 	forEachTestCase(report, func(testCase *testreport.TestCase) {
@@ -146,8 +148,9 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		}
 
 		bundle := bundles[folder]
-		addAttachmentProperties(testCases[0], folder, bundle.Files)
-		result.Linked[folder] = bundle
+		exportDir := path.Join(bundle.AttemptDir, folder)
+		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
+		result.Linked[exportDir] = bundle
 	}
 	return result
 }

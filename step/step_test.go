@@ -88,7 +88,7 @@ func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
 	_, installErr := s.InstallDependencies(Config{})
 	_, appErr := s.Run(Config{App: app, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceADB+"exit 1\n")}, Installation{})
 	_, flowsErr := s.Run(Config{FlowPaths: []string{".maestro"}, App: app, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceADB)}, Installation{BinaryPath: failingMaestro})
-	exportErr := s.ExportOutputs(Config{}, Result{JUnitPath: writeReport(t, 1, 0)})
+	exportErr := s.ExportOutputs(Config{}, Result{WorkDir: t.TempDir(), Attempts: []Attempt{{JUnitPath: writeReport(t, 1, 0)}}})
 
 	assert.Equal(t, errProcessInputs+":", firstLine(configErr))
 	assert.Equal(t, errInstallMaestro+":", firstLine(installErr))
@@ -100,11 +100,14 @@ func TestPhaseErrors_FirstLineIsStable(t *testing.T) {
 func TestFlowsError(t *testing.T) {
 	runErr := errors.New("exit status 1")
 
-	failing := flowsError(writeReport(t, 3, 2), runErr)
+	attempt := func(junitPath string) []Attempt { return []Attempt{{JUnitPath: junitPath}} }
+
+	failing := flowsError(attempt(writeReport(t, 3, 2)), runErr)
 	assert.Equal(t, errFlowsFailed+":\n  2 of 3 flows failed", errorutil.FormattedError(failing))
 
-	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(writeReport(t, 3, 0), runErr)), "no failing flow in the report")
-	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(filepath.Join(t.TempDir(), "missing.xml"), runErr)), "no report")
+	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(attempt(writeReport(t, 3, 0)), runErr)), "no failing flow in the report")
+	assert.Equal(t, errMaestroFailed+":", firstLine(flowsError(attempt(filepath.Join(t.TempDir(), "missing.xml")), runErr)), "no report")
+	assert.NoError(t, flowsError(attempt(writeReport(t, 3, 0)), nil))
 }
 
 func writeReport(t *testing.T, total, failed int) string {
