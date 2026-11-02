@@ -89,27 +89,31 @@ func readFlowFile(pth, folder string) flowFile {
 	return flow
 }
 
-// reportedClassName is the class name the Step reports a flow with, so that a quarantine entry names one flow of one
-// step wherever it was created: Test Reports and Insights both identify a test by its name and class name. It holds
-// the platform, as an Android and an iOS step can run the same flow file, and the flow file's path the way Maestro
-// writes it into the report: relative to the working directory when the file is inside it.
-func reportedClassName(platform Platform, flowPath string) string {
-	pth := flowPath
-	if abs, err := filepath.Abs(flowPath); err == nil {
-		pth = abs
-		if wd, err := os.Getwd(); err == nil {
-			if rel, err := filepath.Rel(wd, abs); err == nil && filepath.IsLocal(rel) {
-				pth = rel
-			}
-		}
+// cwdRelativeOrAbsolute writes a path the way Maestro writes a flow's file into its report.
+func cwdRelativeOrAbsolute(pth string) string {
+	abs, err := filepath.Abs(pth)
+	if err != nil {
+		return pth
 	}
-	return string(platform) + ":" + filepath.ToSlash(pth)
+	wd, err := os.Getwd()
+	if err != nil {
+		return abs
+	}
+	if rel, err := filepath.Rel(wd, abs); err == nil && filepath.IsLocal(rel) {
+		return rel
+	}
+	return abs
+}
+
+// reportedClassName holds the platform too, as an Android and an iOS step can run the same flow file.
+func reportedClassName(platform Platform, flowPath string) string {
+	return string(platform) + ":" + filepath.ToSlash(cwdRelativeOrAbsolute(flowPath))
 }
 
 // quarantinedFlows returns the flows a quarantine entry names. The list holds the quarantined tests of every step
-// of the app, so most entries match no flow. An entry can also carry the class name Maestro writes, the flow's name or
-// its junitClassname, when it was quarantined from a report the Step did not rewrite; it matches on either platform.
-// The suite name is not compared: Maestro names it "Test Suite" unless additional_args sets --test-suite-name.
+// of the app, so most entries match no flow. An entry with Maestro's own class name, the flow's name or its
+// junitClassname, matches on either platform. The suite name is not compared: Maestro names it "Test Suite" unless
+// additional_args sets --test-suite-name.
 func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flowFile, platform Platform) []flowFile {
 	var matched []flowFile
 	for _, flow := range flows {
@@ -124,9 +128,7 @@ func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flow
 	return matched
 }
 
-// setReportedClassNames replaces the class name Maestro writes, the flow's name or its junitClassname property, with
-// the one the Step reports the flow with. A flow keeps Maestro's class name when Maestro does not write its file,
-// before 2.6.0.
+// setReportedClassNames keeps Maestro's class name for a test case without a file, which Maestro writes from 2.6.0.
 func setReportedClassNames(report *testreport.TestReport, platform Platform) {
 	forEachTestCase(report, func(testCase *testreport.TestCase) {
 		if testCase.File != "" {
