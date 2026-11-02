@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bitrise-io/go-steputils/v2/testquarantine"
+	"github.com/bitrise-io/go-steputils/v2/testreport"
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/env"
 	"github.com/bitrise-io/go-utils/v2/log"
@@ -48,10 +49,49 @@ func TestQuarantinedFlows(t *testing.T) {
 		{TestCaseName: "search", TestSuiteName: []string{"Test Suite"}},
 		{TestCaseName: "settings", ClassName: "com.example.SettingsTest", TestSuiteName: []string{"app"}},
 		{TestCaseName: "testSomething", ClassName: "com.example.OtherTest"},
-	}, []flowFile{login, search, settings})
+	}, []flowFile{login, search, settings}, PlatformAndroid)
 
 	assert.Equal(t, []flowFile{login, search}, quarantined,
 		"an entry without a class name matches by name, one of another step's test does not match")
+}
+
+func TestQuarantinedFlows_ByReportedClassName(t *testing.T) {
+	login := flowFile{Path: "flows/login.yaml", Name: "Login", ClassName: "Login"}
+	search := flowFile{Path: "./flows/search.yaml", Name: "search", ClassName: "search"}
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	settings := flowFile{Path: filepath.Join(wd, "flows", "settings.yaml"), Name: "settings", ClassName: "settings"}
+	smokeCheckout := flowFile{Path: "flows/smoke/checkout.yaml", Name: "checkout", ClassName: "checkout"}
+	regressionCheckout := flowFile{Path: "flows/regression/checkout.yaml", Name: "checkout", ClassName: "checkout"}
+
+	quarantined := quarantinedFlows([]testquarantine.QuarantinedTest{
+		{TestCaseName: "Login", ClassName: "android:flows/login.yaml"},
+		{TestCaseName: "search", ClassName: "ios:flows/search.yaml"},
+		{TestCaseName: "settings", ClassName: "ios:flows/settings.yaml"},
+		{TestCaseName: "checkout", ClassName: "ios:flows/regression/checkout.yaml"},
+	}, []flowFile{login, search, settings, smokeCheckout, regressionCheckout}, PlatformIOS)
+
+	assert.Equal(t, []flowFile{search, settings, regressionCheckout}, quarantined,
+		"an entry of the other platform or of another file with the same name does not match, a flow path matches however flow_path gives it")
+}
+
+func TestSetReportedClassNames(t *testing.T) {
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	outside := filepath.Join(filepath.Dir(wd), "shared", "login.yaml")
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login", ClassName: "Auth", File: ".maestro/login.yaml"},
+		{Name: "Shared login", ClassName: "Shared login", File: outside},
+		{Name: "Old Maestro", ClassName: "Old Maestro"},
+	}}}}
+
+	setReportedClassNames(&report, PlatformAndroid)
+
+	testCases := report.TestSuites[0].TestCases
+	assert.Equal(t, "android:.maestro/login.yaml", testCases[0].ClassName, "the junitClassname property is replaced too")
+	assert.Equal(t, "android:"+filepath.ToSlash(outside), testCases[1].ClassName,
+		"a flow outside the working directory keeps its absolute path, as Maestro writes it")
+	assert.Equal(t, "Old Maestro", testCases[2].ClassName, "a report of Maestro before 2.6.0 names no file")
 }
 
 func TestWriteQuarantineConfig(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/v2/testquarantine"
+	"github.com/bitrise-io/go-steputils/v2/testreport"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -88,19 +89,50 @@ func readFlowFile(pth, folder string) flowFile {
 	return flow
 }
 
+// reportedClassName is the class name the Step reports a flow with, so that a quarantine entry names one flow of one
+// step wherever it was created: Test Reports and Insights both identify a test by its name and class name. It holds
+// the platform, as an Android and an iOS step can run the same flow file, and the flow file's path the way Maestro
+// writes it into the report: relative to the working directory when the file is inside it.
+func reportedClassName(platform Platform, flowPath string) string {
+	pth := flowPath
+	if abs, err := filepath.Abs(flowPath); err == nil {
+		pth = abs
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(wd, abs); err == nil && filepath.IsLocal(rel) {
+				pth = rel
+			}
+		}
+	}
+	return string(platform) + ":" + filepath.ToSlash(pth)
+}
+
 // quarantinedFlows returns the flows a quarantine entry names. The list holds the quarantined tests of every step
-// of the app, so most entries match no flow. The suite name is not compared: Maestro names it "Test Suite" unless
-// additional_args sets --test-suite-name.
-func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flowFile) []flowFile {
+// of the app, so most entries match no flow. An entry can also carry the class name Maestro writes, the flow's name or
+// its junitClassname, when it was quarantined from a report the Step did not rewrite; it matches on either platform.
+// The suite name is not compared: Maestro names it "Test Suite" unless additional_args sets --test-suite-name.
+func quarantinedFlows(quarantined []testquarantine.QuarantinedTest, flows []flowFile, platform Platform) []flowFile {
 	var matched []flowFile
 	for _, flow := range flows {
+		className := reportedClassName(platform, flow.Path)
 		if slices.ContainsFunc(quarantined, func(test testquarantine.QuarantinedTest) bool {
-			return test.TestCaseName == flow.Name && (test.ClassName == "" || test.ClassName == flow.ClassName)
+			return test.TestCaseName == flow.Name &&
+				(test.ClassName == "" || test.ClassName == className || test.ClassName == flow.ClassName)
 		}) {
 			matched = append(matched, flow)
 		}
 	}
 	return matched
+}
+
+// setReportedClassNames replaces the class name Maestro writes, the flow's name or its junitClassname property, with
+// the one the Step reports the flow with. A flow keeps Maestro's class name when Maestro does not write its file,
+// before 2.6.0.
+func setReportedClassNames(report *testreport.TestReport, platform Platform) {
+	forEachTestCase(report, func(testCase *testreport.TestCase) {
+		if testCase.File != "" {
+			testCase.ClassName = reportedClassName(platform, testCase.File)
+		}
+	})
 }
 
 // patternMatchedFlows returns the flows that are not quarantined, but that the exclusion pattern of a quarantined flow

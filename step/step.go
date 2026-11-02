@@ -256,7 +256,7 @@ func (s Step) skipQuarantinedFlows(config Config, workDir string) (Config, error
 	if err != nil {
 		return config, err
 	}
-	quarantined := quarantinedFlows(config.Quarantined, flows)
+	quarantined := quarantinedFlows(config.Quarantined, flows, config.App.Platform)
 	if len(quarantined) == 0 {
 		return config, nil
 	}
@@ -377,6 +377,7 @@ func (s Step) exportReport(config Config, result Result) error {
 		s.logger.Warnf("No JUnit report to export")
 		return nil
 	}
+	setReportedClassNames(&report, config.App.Platform)
 
 	junitPath := filepath.Join(result.WorkDir, junitReportFileName)
 	if err := writeJUnitReport(report, junitPath); err != nil {
