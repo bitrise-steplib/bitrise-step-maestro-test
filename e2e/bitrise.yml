@@ -218,6 +218,7 @@ step_bundles:
             test_run_dir="$(find "$BITRISE_TEST_DEPLOY_DIR" -type d -name "$TEST_NAME" | head -1)"
             test -s "$test_run_dir/test-info.json"
             report="$test_run_dir/$(basename "$MAESTRO_JUNIT_PATH")"
+            grep -q 'classname="ios:' "$report"
             grep -q 'name="attachment_0"' "$report"
             grep -o 'name="attachment_[0-9]*" value="[^"]*"' "$report" | sed 's/.*value="\(.*\)"/\1/' | while read -r attachment; do
               test -s "$test_run_dir/$attachment"
