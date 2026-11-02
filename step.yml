@@ -94,7 +94,7 @@ inputs:
       Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
     is_required: true
 
-- maestro_version: 2.11.0
+- maestro_version: 2.12.0
   opts:
     category: Debugging
     title: Maestro CLI version
