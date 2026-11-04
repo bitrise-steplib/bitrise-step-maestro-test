@@ -197,11 +197,15 @@ func TestExportOutputs_AttachesEveryAttempt(t *testing.T) {
 	require.NoError(t, err)
 
 	testResultDir := t.TempDir()
-	require.NoError(t, s.ExportOutputs(Config{TestName: "Maestro", TestResultDir: testResultDir}, result))
+	require.NoError(t, s.ExportOutputs(Config{App: App{Platform: PlatformAndroid}, TestName: "Maestro", TestResultDir: testResultDir}, result))
 
 	testRunDir := filepath.Join(testResultDir, "Maestro")
 	report := readTestReport(t, filepath.Join(testRunDir, junitReportFileName))
 	assert.Equal(t, []string{"Flow A", "Flow B", "Flow B"}, testCaseNames(report))
+	var classNames []string
+	forEachTestCase(&report, func(testCase *testreport.TestCase) { classNames = append(classNames, testCase.ClassName) })
+	assert.Equal(t, []string{"android:.maestro/flow_a.yaml", "android:.maestro/flow_b.yaml", "android:.maestro/flow_b.yaml"}, classNames,
+		"every run of a flow has the same class name, so Test Reports counts the retry as a run of the same test")
 
 	var flowBRuns [][]string
 	forEachTestCase(&report, func(testCase *testreport.TestCase) {

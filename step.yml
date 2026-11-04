@@ -127,6 +127,8 @@ inputs:
       Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.
 
       A flow found in a `flow_path` folder is skipped by its path inside that folder. If another `flow_path` folder has a file with the same path, that file is skipped too, and the Step logs a warning.
+
+      The Step reports each flow with the class name `<platform>:<flow file>`, for example `android:.maestro/login.yaml`, instead of the flow's name or its `junitClassname`, so that quarantining a flow on one platform does not skip it on the other.
     is_required: false
 
 - bitrise_test_result_dir: $BITRISE_TEST_RESULT_DIR
