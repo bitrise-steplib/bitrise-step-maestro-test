@@ -146,7 +146,7 @@ func TestLinkAttachments_KeepsExistingAttachmentNames(t *testing.T) {
 		}},
 	}}}}}
 
-	result := linkAttachments(&report, map[string]flowBundle{"Flow A": {Files: []string{"logs/maestro.log", "screenshots/final.png", "logs/device-logcat.txt"}}})
+	result := linkAttachments(&report, map[string]flowBundle{"Flow A": {Files: []string{"logs/maestro.log", "screenshots/final.png", "logs/device-logcat.txt"}}}, false)
 
 	assert.Empty(t, result.Warnings)
 	assert.Equal(t, []testreport.Property{
@@ -164,7 +164,7 @@ func TestLinkAttachments_SkipsAmbiguousFlowNames(t *testing.T) {
 		{TestCases: []testreport.TestCase{{Name: "Login"}}},
 	}}
 
-	result := linkAttachments(&report, map[string]flowBundle{"Login": {Files: []string{"logs/maestro.log"}}})
+	result := linkAttachments(&report, map[string]flowBundle{"Login": {Files: []string{"logs/maestro.log"}}}, false)
 
 	assert.Empty(t, result.Linked)
 	assert.Len(t, result.Warnings, 1)
@@ -185,7 +185,7 @@ func TestLinkAttachments_CollidingFlowFolders(t *testing.T) {
 		"Login-2":   {Files: []string{"logs/maestro.log"}},
 		"Login-2-2": {Files: []string{"logs/maestro.log"}},
 		"Settings":  {Files: []string{"logs/maestro.log"}},
-	})
+	}, false)
 
 	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
 	assert.Len(t, result.Warnings, 3)
@@ -208,10 +208,59 @@ func TestLinkAttachments_CascadingFlowFolderCollisions(t *testing.T) {
 		"Login-2-2":   {Files: []string{"logs/maestro.log"}},
 		"Login-2-2-2": {Files: []string{"logs/maestro.log"}},
 		"Settings":    {Files: []string{"logs/maestro.log"}},
-	})
+	}, false)
 
 	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
 	assert.Len(t, result.Warnings, 4)
+}
+
+func TestLinkAttachments_ShardedFlowFolders(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Checkout"},
+		{Name: "Settings"},
+		{Name: "Settings"},
+	}}}}
+
+	// Each shard suffixes its folders with -shard-N, and a colliding name gets its -N after that.
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-1":      {Files: []string{"logs/maestro.log"}},
+		"Checkout-shard-2":   {Files: []string{"logs/maestro.log"}},
+		"Settings-shard-1":   {Files: []string{"logs/maestro.log"}},
+		"Settings-shard-1-2": {Files: []string{"logs/maestro.log"}},
+	}, true)
+
+	assert.Equal(t, map[string][]string{
+		"Login":    {"Login-shard-1/logs/maestro.log"},
+		"Checkout": {"Checkout-shard-2/logs/maestro.log"},
+	}, attachmentsByTestCase(report))
+	assert.Len(t, result.Warnings, 2, "the two Settings flows cannot be told apart")
+}
+
+func TestLinkAttachments_KeepsShardSuffixWhenNotSharded(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{{Name: "Login-shard-1"}}}}}
+
+	result := linkAttachments(&report, map[string]flowBundle{"Login-shard-1": {Files: []string{"logs/maestro.log"}}}, false)
+
+	assert.Empty(t, result.Warnings)
+	assert.Equal(t, map[string][]string{"Login-shard-1": {"Login-shard-1/logs/maestro.log"}}, attachmentsByTestCase(report))
+}
+
+func TestWithoutShardSuffix(t *testing.T) {
+	assert.Equal(t, "Login", withoutShardSuffix("Login-shard-2"))
+	assert.Equal(t, "Login-2", withoutShardSuffix("Login-shard-2-2"))
+	assert.Equal(t, "Login-2-2", withoutShardSuffix("Login-shard-10-2-2"))
+	assert.Equal(t, "Login", withoutShardSuffix("Login"))
+}
+
+func TestFolderShard(t *testing.T) {
+	for folder, want := range map[string]int{"Login-shard-2": 2, "Login-shard-2-3": 2, "Login-shard-12": 12} {
+		shard, ok := folderShard(folder)
+		assert.True(t, ok, folder)
+		assert.Equal(t, want, shard, folder)
+	}
+	_, ok := folderShard("Login")
+	assert.False(t, ok)
 }
 
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
@@ -302,4 +351,53 @@ func propertyValue(testCase testreport.TestCase, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestAddStepLists_ReadsEachShardedFlowFromItsOwnShard(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Checkout"},
+	}}}}
+
+	// Login ran on shard 2 while shard 1 was running Checkout, so Login's log has both shards' lines. Checkout is a
+	// retry of one flow, which Maestro runs on one shard with no suffix and no prefix.
+	outputDir := t.TempDir()
+	loginDir := filepath.Join(outputDir, "Login-shard-2")
+	writeFile(t, filepath.Join(loginDir, "commands.json"), `[
+		{"metadata": {"status": "COMPLETED", "duration": 1}},
+		{"metadata": {"status": "FAILED", "duration": 2}}
+	]`)
+	writeFile(t, filepath.Join(loginDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "[shard 1] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.001", "Start", "[shard 2] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.002", "Start", "[shard 1] Tap on \"Cart\"", "RUNNING"),
+		logLine("12:00:00.003", "Start", "[shard 2] Tap on \"Sign in\"", "RUNNING"),
+	}, ""))
+	checkoutDir := filepath.Join(outputDir, "Checkout")
+	writeFlowFiles(t, checkoutDir, testCommand{name: `Tap on "Cart"`, status: "COMPLETED"})
+
+	link := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-2": {Dir: loginDir},
+		"Checkout":      {Dir: checkoutDir},
+	}, true)
+	require.Empty(t, link.Warnings)
+
+	testStep().addStepLists(link)
+
+	assert.Equal(t, 2, link.Linked["Login-shard-2"].Shard)
+	assert.Equal(t, 0, link.Linked["Checkout"].Shard)
+	assert.Equal(t, map[string]string{
+		"Login":    formatStepList([]flowStep{{Name: `Launch app "com.example"`, Status: "COMPLETED", DurationMs: 1}, {Name: `Tap on "Sign in"`, Status: "FAILED", DurationMs: 2}}),
+		"Checkout": formatStepList([]flowStep{{Name: `Tap on "Cart"`, Status: "COMPLETED", DurationMs: 1}}),
+	}, systemOutsByTestCase(report))
+}
+
+func systemOutsByTestCase(report testreport.TestReport) map[string]string {
+	outs := map[string]string{}
+	forEachTestCase(&report, func(testCase *testreport.TestCase) {
+		if testCase.SystemOut != nil {
+			outs[testCase.Name] = testCase.SystemOut.Value
+		}
+	})
+	return outs
 }

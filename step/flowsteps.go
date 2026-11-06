@@ -81,7 +81,11 @@ func flowFilePaths(flowDir string) (commandsPath, logPath string) {
 // maestro.log. Both list every command that started, in order, so the n-th name in the log belongs to the n-th record.
 // The steps are returned only when the two files list the same number of commands, because a wrong name is worse than
 // no list.
-func readFlowSteps(flowDir string) ([]flowStep, error) {
+//
+// The shard is the one the flow ran on in a sharded run, 0 when the run was not sharded. The shards run at the same
+// time, and a flow's maestro.log also has the lines of the flows that ran on the other shards meanwhile. Maestro
+// prefixes each command line with the shard, "[shard 2] ", so only the lines of the flow's own shard are read.
+func readFlowSteps(flowDir string, shard int) ([]flowStep, error) {
 	commandsPath, logPath := flowFilePaths(flowDir)
 
 	data, err := os.ReadFile(filepath.Join(flowDir, commandsPath))
@@ -93,7 +97,7 @@ func readFlowSteps(flowDir string) ([]flowStep, error) {
 		return nil, fmt.Errorf("parse %s: %w", filepath.ToSlash(commandsPath), err)
 	}
 
-	names, err := readCommandNames(filepath.Join(flowDir, logPath))
+	names, err := readCommandNames(filepath.Join(flowDir, logPath), shard)
 	if err != nil {
 		return nil, err
 	}
@@ -120,18 +124,29 @@ func readFlowSteps(flowDir string) ([]flowStep, error) {
 	return steps, nil
 }
 
-// readCommandNames lists the names of the commands in the order they started.
-func readCommandNames(logPath string) ([]string, error) {
+// readCommandNames lists the names of the commands in the order they started. With a shard, it lists only the commands
+// of that shard, without the shard prefix.
+func readCommandNames(logPath string, shard int) ([]string, error) {
 	entries, err := readCommandStartEntries(logPath)
 	if err != nil {
 		return nil, err
 	}
 
+	shardPrefix := ""
+	if shard > 0 {
+		shardPrefix = fmt.Sprintf("[shard %d] ", shard)
+	}
 	var names []string
 	for _, entry := range entries {
-		if match := commandStartLine.FindStringSubmatch(entry); match != nil {
-			names = append(names, strings.TrimRight(match[1], "\n"))
+		match := commandStartLine.FindStringSubmatch(entry)
+		if match == nil {
+			continue
 		}
+		name, ok := strings.CutPrefix(match[1], shardPrefix)
+		if !ok {
+			continue
+		}
+		names = append(names, strings.TrimRight(name, "\n"))
 	}
 	return names, nil
 }

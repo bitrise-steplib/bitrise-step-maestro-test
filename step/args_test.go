@@ -2,6 +2,7 @@ package step
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,7 +57,7 @@ func TestTestArgs(t *testing.T) {
 		"--exclude-tags", "flaky",
 		"--no-reinstall-driver",
 		".maestro",
-	}, testArgs(config, attempt, config.FlowPaths))
+	}, testArgs(config, attempt, config.FlowPaths, nil))
 }
 
 func TestTestArgs_Minimal(t *testing.T) {
@@ -64,7 +65,7 @@ func TestTestArgs_Minimal(t *testing.T) {
 	config := Config{FlowPaths: []string{"flows/login.yaml"}, App: App{Path: "My.app", Platform: PlatformIOS}}
 	assert.Equal(t, []string{
 		"test", "--platform", "ios", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "flows/login.yaml",
-	}, testArgs(config, attempt, config.FlowPaths), "Maestro runs on a device of the app's platform when an emulator and a simulator both run")
+	}, testArgs(config, attempt, config.FlowPaths, nil), "Maestro runs on a device of the app's platform when an emulator and a simulator both run")
 }
 
 func TestTestArgs_MultipleFlowPaths(t *testing.T) {
@@ -72,7 +73,7 @@ func TestTestArgs_MultipleFlowPaths(t *testing.T) {
 	config := Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}, App: App{Path: "app.apk", Platform: PlatformAndroid}}
 	assert.Equal(t, []string{
 		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "maestro/entry", "maestro/unlock",
-	}, testArgs(config, attempt, config.FlowPaths))
+	}, testArgs(config, attempt, config.FlowPaths, nil))
 }
 
 func TestTestArgs_WorkspaceConfig(t *testing.T) {
@@ -80,7 +81,54 @@ func TestTestArgs_WorkspaceConfig(t *testing.T) {
 	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, WorkspaceConfig: ".maestro/config.yaml"}
 	assert.Equal(t, []string{
 		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "--config", ".maestro/config.yaml", ".maestro/login.yaml",
-	}, testArgs(config, attempt, []string{".maestro/login.yaml"}), "a retry of flow files keeps the folder's config")
+	}, testArgs(config, attempt, []string{".maestro/login.yaml"}, nil), "a retry of flow files keeps the folder's config")
+}
+
+func TestTestArgs_ShardSplit(t *testing.T) {
+	attempt := Attempt{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, ShardSplit: 2}
+	assert.Equal(t, []string{
+		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out",
+		"--shard-split", "2", "--device", "emulator-5554,emulator-5556",
+		".maestro",
+	}, testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554", "emulator-5556"}))
+
+	retry := testArgs(config, attempt, []string{".maestro/login.yaml"}, []string{"emulator-5554"})
+	assert.NotContains(t, retry, "--shard-split", "one flow runs in one shard")
+	assert.Contains(t, retry, "--device", "on the device the app was installed on")
+	assert.Equal(t, "emulator-5554", retry[slices.Index(retry, "--device")+1])
+
+	config.ShardSplit = 1
+	args := testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554"})
+	assert.NotContains(t, args, "--shard-split")
+	assert.NotContains(t, args, "--device")
+}
+
+func TestFindArg(t *testing.T) {
+	for _, args := range [][]string{
+		{"--shard-split", "2"},
+		{"--shard-split=2"},
+		{"--no-reinstall-driver", "--shard-all=2"},
+		{"--shards", "2"},
+		{"-s", "2"},
+	} {
+		_, ok := findArg(args, shardArgNames...)
+		assert.True(t, ok, args)
+	}
+	name, _ := findArg([]string{"--shard-all=2"}, shardArgNames...)
+	assert.Equal(t, "--shard-all", name)
+
+	_, ok := findArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"}, shardArgNames...)
+	assert.False(t, ok)
+
+	name, ok = findArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"}, deviceArgNames...)
+	assert.True(t, ok)
+	assert.Equal(t, "--device", name)
+	name, ok = findArg([]string{"--udid=A4199825"}, deviceArgNames...)
+	assert.True(t, ok)
+	assert.Equal(t, "--udid", name)
+	_, ok = findArg([]string{"--device-id", "x"}, deviceArgNames...)
+	assert.False(t, ok)
 }
 
 func TestConfigArg(t *testing.T) {

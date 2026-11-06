@@ -1,6 +1,10 @@
 package step
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/bitrise-io/go-utils/v2/command"
@@ -51,20 +55,40 @@ func TestParseBootedSimulators_OnlyIOS(t *testing.T) {
 	assert.Empty(t, simulators, "a Watch alone")
 }
 
-func TestSingleDevice(t *testing.T) {
+func TestExpectedDevices(t *testing.T) {
 	emulator := runningDevice{ID: "emulator-5554", Name: "emulator-5554"}
-	device, err := singleDevice(PlatformAndroid, []runningDevice{emulator})
-	require.NoError(t, err)
-	assert.Equal(t, emulator, device)
+	emulators := []runningDevice{emulator, {ID: "emulator-5556", Name: "emulator-5556"}, {ID: "emulator-5558", Name: "emulator-5558"}}
+	simulators := []runningDevice{{ID: "1", Name: "A (1)"}, {ID: "2", Name: "B (2)"}}
 
-	_, err = singleDevice(PlatformAndroid, nil)
-	assert.ErrorContains(t, err, "AVD Manager")
-	_, err = singleDevice(PlatformIOS, nil)
-	assert.ErrorContains(t, err, "Xcode Start Simulator")
-	_, err = singleDevice(PlatformAndroid, []runningDevice{emulator, {ID: "emulator-5556", Name: "emulator-5556"}})
-	assert.ErrorContains(t, err, "2 Android devices are running (emulator-5554, emulator-5556)")
-	_, err = singleDevice(PlatformIOS, []runningDevice{{ID: "1", Name: "A (1)"}, {ID: "2", Name: "B (2)"}})
-	assert.ErrorContains(t, err, "2 iOS simulators are booted (A (1), B (2))")
+	devices, err := expectedDevices(PlatformAndroid, []runningDevice{emulator}, 1)
+	require.NoError(t, err)
+	assert.Equal(t, []runningDevice{emulator}, devices)
+	devices, err = expectedDevices(PlatformAndroid, emulators, 3)
+	require.NoError(t, err)
+	assert.Equal(t, emulators, devices)
+	devices, err = expectedDevices(PlatformIOS, simulators, 2)
+	require.NoError(t, err)
+	assert.Equal(t, simulators, devices)
+
+	for _, tc := range []struct {
+		platform Platform
+		devices  []runningDevice
+		count    int
+		want     string
+	}{
+		{PlatformAndroid, nil, 1, "AVD Manager"},
+		{PlatformIOS, nil, 1, "Xcode Start Simulator"},
+		{PlatformAndroid, emulators[:2], 1, "2 Android devices are running (emulator-5554, emulator-5556), the Step runs the flows on one device unless shard_split is set: set shard_split to 2"},
+		{PlatformIOS, simulators, 1, "2 iOS simulators are booted (A (1), B (2))"},
+		{PlatformAndroid, nil, 3, "shard_split is 3, but no Android emulator or device is running: start 3"},
+		{PlatformIOS, nil, 2, "shard_split is 2, but no iOS simulator is booted: boot 2"},
+		{PlatformAndroid, emulators[:2], 3, "shard_split is 3, but 2 Android devices are running (emulator-5554, emulator-5556): run exactly 3, or set shard_split to 2"},
+		{PlatformAndroid, append(slices.Clone(emulators), runningDevice{ID: "emulator-5560", Name: "emulator-5560"}), 3, "shard_split is 3, but 4 Android devices are running"},
+		{PlatformIOS, simulators[:1], 2, "shard_split is 2, but 1 iOS simulators are booted (A (1))"},
+	} {
+		_, err := expectedDevices(tc.platform, tc.devices, tc.count)
+		assert.ErrorContains(t, err, tc.want)
+	}
 }
 
 func TestRun_FailsBeforeInstallWithSeveralDevices(t *testing.T) {
@@ -81,4 +105,94 @@ touch "`+installed+`"
 	assert.Equal(t, errInstallApp+":", firstLine(err))
 	assert.ErrorContains(t, err, "2 Android devices are running")
 	assert.NoFileExists(t, installed)
+}
+
+const twoDevicesADB = `#!/bin/sh
+if [ "$1" = devices ]; then printf 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n'; exit 0; fi
+echo "$@" >> "$INSTALL_LOG"
+`
+
+func TestRun_FailsBeforeInstallWhenShardSplitDoesNotMatch(t *testing.T) {
+	installLog := filepath.Join(t.TempDir(), "installs.txt")
+	t.Setenv("INSTALL_LOG", installLog)
+
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	_, err := s.Run(Config{App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, twoDevicesADB), ShardSplit: 3}, Installation{})
+
+	assert.Equal(t, errInstallApp+":", firstLine(err))
+	assert.ErrorContains(t, err, "shard_split is 3, but 2 Android devices are running")
+	assert.NoFileExists(t, installLog)
+}
+
+func TestRun_ShardSplitInstallsOnEveryDevice(t *testing.T) {
+	installLog := filepath.Join(t.TempDir(), "installs.txt")
+	t.Setenv("INSTALL_LOG", installLog)
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	fakeMaestro := filepath.Join(t.TempDir(), "maestro")
+	writeFile(t, fakeMaestro, "#!/bin/sh\necho \"$@\" > \""+argsFile+"\"\n")
+	require.NoError(t, os.Chmod(fakeMaestro, 0755))
+
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, twoDevicesADB), ShardSplit: 2}
+	_, err := s.Run(config, Installation{BinaryPath: fakeMaestro})
+	require.NoError(t, err)
+
+	installs, err := os.ReadFile(installLog)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"-s emulator-5554 install -r app.apk", "-s emulator-5556 install -r app.apk"}, strings.Split(strings.TrimSpace(string(installs)), "\n"), "the installs run at the same time, in any order")
+
+	maestroArgs, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.True(t, strings.Contains(string(maestroArgs), "--shard-split 2 --device emulator-5554,emulator-5556 "), string(maestroArgs))
+}
+
+func TestRun_InstallsOnEveryDeviceAtTheSameTime(t *testing.T) {
+	// Each install waits for the other one's marker file: the installs only finish when they run at the same time.
+	markers := t.TempDir()
+	adb := `#!/bin/sh
+if [ "$1" = devices ]; then printf 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n'; exit 0; fi
+touch "` + markers + `/$2"
+for i in $(seq 1 100); do [ "$(ls "` + markers + `" | wc -l)" -ge 2 ] && exit 0; sleep 0.05; done
+echo "the other install did not start" >&2
+exit 1
+`
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, adb), ShardSplit: 2}
+	_, err := s.Run(config, Installation{BinaryPath: "true"})
+	require.NoError(t, err)
+}
+
+func TestRun_InstallFailureNamesTheDevice(t *testing.T) {
+	adb := `#!/bin/sh
+if [ "$1" = devices ]; then printf 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n'; exit 0; fi
+if [ "$2" = emulator-5556 ]; then echo "adb: failed to install app.apk: INSTALL_FAILED_INSUFFICIENT_STORAGE" >&2; exit 1; fi
+`
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, adb), ShardSplit: 2}
+	_, err := s.Run(config, Installation{BinaryPath: "true"})
+
+	assert.Equal(t, errInstallApp+":", firstLine(err))
+	assert.ErrorContains(t, err, "app.apk on emulator-5556")
+	assert.NotContains(t, err.Error(), "on emulator-5554")
+
+	oneDeviceFailingInstall := `#!/bin/sh
+if [ "$1" = devices ]; then printf 'List of devices attached\nemulator-5554\tdevice\n'; exit 0; fi
+exit 1
+`
+	_, err = s.Run(Config{App: App{Path: "app.apk", Platform: PlatformAndroid}, AndroidSDKDir: fakeAndroidSDK(t, oneDeviceFailingInstall)}, Installation{})
+	assert.Equal(t, errInstallApp+":", firstLine(err))
+	assert.ErrorContains(t, err, "app.apk: ", "one device is not named")
+	assert.NotContains(t, err.Error(), " on emulator")
+}
+
+func TestShardDeviceIDs(t *testing.T) {
+	ids := []string{"a", "b", "c"}
+	assert.Equal(t, ids, shardDeviceIDs(ids, []string{".maestro"}, false), "the first attempt's flow paths can be folders")
+	assert.Equal(t, ids, shardDeviceIDs(ids, []string{"a.yaml", "b.yaml", "c.yaml", "d.yaml"}, true))
+	assert.Equal(t, []string{"a", "b"}, shardDeviceIDs(ids, []string{"a.yaml", "b.yaml"}, true))
+	assert.Equal(t, []string{"a"}, shardDeviceIDs(ids, []string{"a.yaml"}, true))
 }
