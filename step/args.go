@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kballard/go-shellquote"
@@ -62,8 +64,16 @@ func splitArgs(input string) ([]string, error) {
 	return shellquote.Split(input)
 }
 
-func testArgs(config Config, attempt Attempt, flowPaths []string) []string {
+// testArgs builds the maestro test command. With shard_split, it names the devices the app was installed on, as
+// Maestro would otherwise pick any connected device, and runs one shard per device.
+func testArgs(config Config, attempt Attempt, flowPaths, deviceIDs []string) []string {
 	args := []string{"test", "--platform", string(config.App.Platform), "--format", "junit", "--output", attempt.JUnitPath, "--test-output-dir", attempt.TestOutputDir}
+	if config.ShardSplit > 1 {
+		if len(deviceIDs) > 1 {
+			args = append(args, "--shard-split", strconv.Itoa(len(deviceIDs)))
+		}
+		args = append(args, "--device", strings.Join(deviceIDs, ","))
+	}
 	if config.WorkspaceConfig != "" {
 		args = append(args, "--config", config.WorkspaceConfig)
 	}
@@ -115,6 +125,25 @@ func configArgValue(args []string) (string, bool) {
 		}
 		if value, ok := strings.CutPrefix(arg, "--config="); ok {
 			return value, true
+		}
+	}
+	return "", false
+}
+
+// The Maestro options the Step sets itself. It sets --shard-split from the shard_split input, as it has to check the
+// running devices and install the app on each of them, and with shard_split above 1 it names those devices, so a
+// --device in additional_args would be passed twice.
+var (
+	shardArgNames  = []string{"--shard-split", "--shard-all", "--shards", "-s"}
+	deviceArgNames = []string{"--device", "--udid"}
+)
+
+// findArg returns the first of the named options in args, given as --name value or --name=value.
+func findArg(args []string, names ...string) (string, bool) {
+	for _, arg := range args {
+		name, _, _ := strings.Cut(arg, "=")
+		if slices.Contains(names, name) {
+			return name, true
 		}
 	}
 	return "", false

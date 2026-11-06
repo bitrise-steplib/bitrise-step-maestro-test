@@ -13,7 +13,9 @@ description: |-
 
   The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
 
-  Only one device of the app's platform may run: the Step fails before installing the app if it finds none or several. To run the flows on several devices, use parallel Pipeline Workflows, see the examples below.
+  By default only one device of the app's platform may run: the Step fails before installing the app if it finds none or several.
+
+  To split the flows across several devices on the same machine, start them all before this Step and set **Number of devices to split the flows across** (`shard_split`) to their number. To run the flows on several machines, use parallel Pipeline Workflows, see the examples below.
 
   #### Flow variables
 
@@ -92,6 +94,20 @@ inputs:
       The maximum number of reruns allowed is 10. (Default: 0, which implies no reruns.)
 
       Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`.
+    is_required: true
+
+- shard_split: "1"
+  opts:
+    title: Number of devices to split the flows across
+    summary: The number of running emulators or simulators Maestro splits the flows across with `--shard-split`.
+    description: |-
+      The number of running emulators or simulators Maestro splits the flows across with `--shard-split`. Each device runs a part of the flows, and the results are reported together.
+
+      Exactly this many devices of the app's platform must run: the Step fails before installing the app if it finds more or fewer. The Step installs the app on each device, and runs the flows on those devices, so do not pass `--device` in `additional_args`.
+
+      Flows ordered with `executionOrder` in the workspace config cannot be split across devices: Maestro runs a sequence on one device.
+
+      Set it here instead of passing `--shard-split` in `additional_args`. `--shard-all` is not supported.
     is_required: true
 
 - maestro_version: 2.11.0

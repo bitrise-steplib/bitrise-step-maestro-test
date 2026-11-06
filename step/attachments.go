@@ -124,7 +124,8 @@ type attachmentLinkResult struct {
 
 // linkAttachments matches each flow folder to its test case, and adds an attachment_N property per bundle file to it.
 // The value is the file's path relative to the report's folder: [<attempt folder>/]<flow folder>/<path inside the flow folder>.
-func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle) attachmentLinkResult {
+// When sharded, Maestro names the folders <flow>-shard-N, before any -N suffix of a colliding name.
+func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundle, sharded bool) attachmentLinkResult {
 	testCasesByFolder := map[string][]*testreport.TestCase{}
 	forEachTestCase(report, func(testCase *testreport.TestCase) {
 		folder := flowFolderName(testCase.Name)
@@ -133,12 +134,16 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
-		if prefix, ok := duplicatedCollisionPrefix(folder, testCasesByFolder); ok {
+		flowFolder := folder
+		if sharded {
+			flowFolder = withoutShardSuffix(folder)
+		}
+		if prefix, ok := duplicatedCollisionPrefix(flowFolder, testCasesByFolder); ok {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
 			continue
 		}
 
-		testCases := testCasesByFolder[folder]
+		testCases := testCasesByFolder[flowFolder]
 		switch {
 		case len(testCases) == 0:
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Maestro output folder %q does not belong to a test case, its files and step list are not added", folder))
@@ -171,6 +176,17 @@ func duplicatedCollisionPrefix(folder string, testCasesByFolder map[string][]*te
 		}
 	}
 	return "", false
+}
+
+// Maestro 2.11.0 names a sharded run's flow folders <flow>-shard-N, and puts the -N collision suffix after that
+// (TestDebugReporter.resolveFlowDir). When one shard runs, for example a retry of a single flow, it adds no shard
+// suffix. Check the naming when raising maestro_version: a folder this does not match is reported as belonging to no
+// test case, and its files and step list are left out of Test Reports.
+var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-\d+((?:-\d+)*)$`)
+
+// withoutShardSuffix turns a sharded run's Login-shard-2 folder into Login, and Login-shard-2-2 into Login-2.
+func withoutShardSuffix(folder string) string {
+	return shardFolderSuffix.ReplaceAllString(folder, "$1$2")
 }
 
 // flowFolderName mirrors how Maestro names a flow's output folder.

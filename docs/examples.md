@@ -42,6 +42,26 @@ Run only the flows tagged `smoke`, and skip the ones tagged `flaky`:
     - exclude_tags: flaky
 ```
 
+Split the flows across two iOS simulators on the same VM. Start both with **Xcode Start Simulator** before the Step, and set `shard_split` to the number of booted simulators:
+```yaml
+- xcode-build-for-simulator: {}
+- xcode-start-simulator:
+    title: Start the first simulator
+    inputs:
+    - destination: platform=iOS Simulator,name=iPhone 17,OS=latest
+    - wait_for_boot_timeout: 120
+- xcode-start-simulator:
+    title: Start the second simulator
+    inputs:
+    - destination: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+    - wait_for_boot_timeout: 120
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APP_DIR_PATH
+    - shard_split: 2
+- deploy-to-bitrise-io: {}
+```
+
 Split the flows across parallel Pipeline Workflows, each running on its own VM with one emulator. Tag the flows `shard0` and `shard1`, and every copy of the Workflow runs the flows tagged with its index:
 ```yaml
 pipelines:
