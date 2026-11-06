@@ -2,6 +2,7 @@ package step
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,11 +93,18 @@ func TestTestArgs_ShardSplit(t *testing.T) {
 		".maestro",
 	}, testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554", "emulator-5556"}))
 
+	retry := testArgs(config, attempt, []string{".maestro/login.yaml"}, []string{"emulator-5554"})
+	assert.NotContains(t, retry, "--shard-split", "one flow runs in one shard")
+	assert.Contains(t, retry, "--device", "on the device the app was installed on")
+	assert.Equal(t, "emulator-5554", retry[slices.Index(retry, "--device")+1])
+
 	config.ShardSplit = 1
-	assert.NotContains(t, testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554"}), "--shard-split")
+	args := testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554"})
+	assert.NotContains(t, args, "--shard-split")
+	assert.NotContains(t, args, "--device")
 }
 
-func TestShardArg(t *testing.T) {
+func TestFindArg(t *testing.T) {
 	for _, args := range [][]string{
 		{"--shard-split", "2"},
 		{"--shard-split=2"},
@@ -104,13 +112,22 @@ func TestShardArg(t *testing.T) {
 		{"--shards", "2"},
 		{"-s", "2"},
 	} {
-		_, ok := shardArg(args)
+		_, ok := findArg(args, shardArgNames...)
 		assert.True(t, ok, args)
 	}
-	name, _ := shardArg([]string{"--shard-all=2"})
+	name, _ := findArg([]string{"--shard-all=2"}, shardArgNames...)
 	assert.Equal(t, "--shard-all", name)
 
-	_, ok := shardArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"})
+	_, ok := findArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"}, shardArgNames...)
+	assert.False(t, ok)
+
+	name, ok = findArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"}, deviceArgNames...)
+	assert.True(t, ok)
+	assert.Equal(t, "--device", name)
+	name, ok = findArg([]string{"--udid=A4199825"}, deviceArgNames...)
+	assert.True(t, ok)
+	assert.Equal(t, "--udid", name)
+	_, ok = findArg([]string{"--device-id", "x"}, deviceArgNames...)
 	assert.False(t, ok)
 }
 

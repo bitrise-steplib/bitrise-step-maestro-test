@@ -169,6 +169,25 @@ func TestRun_DoesNotRetryFlowsOrderedByExecutionOrder(t *testing.T) {
 	assert.Len(t, maestro.invocations(t), 1)
 }
 
+func TestRun_RetriesShardAcrossNoMoreDevicesThanFlows(t *testing.T) {
+	maestro := newFakeMaestro(t, flowBFailsReport, flowBPassesReport)
+	s := testStep()
+	s.commandFactory = command.NewFactory(env.NewRepository())
+
+	config := retryConfig(t, 1)
+	config.ShardSplit = 2
+	config.AndroidSDKDir = fakeAndroidSDK(t, twoDevicesADB)
+	t.Setenv("INSTALL_LOG", filepath.Join(t.TempDir(), "installs.txt"))
+	_, err := s.Run(config, Installation{BinaryPath: maestro.binary})
+	require.NoError(t, err)
+
+	invocations := maestro.invocations(t)
+	require.Len(t, invocations, 2)
+	assert.Contains(t, invocations[0], "--shard-split 2 --device emulator-5554,emulator-5556 ")
+	assert.NotContains(t, invocations[1], "--shard-split", "one failed flow runs in one shard")
+	assert.Contains(t, invocations[1], "--device emulator-5554 .maestro/flow_b.yaml", "on a device the app was installed on")
+}
+
 func TestRun_RetriesKeepTheWorkspaceConfig(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFile(t, filepath.Join(flowDir, "config.yaml"), "platform:\n  android:\n    disableAnimations: true\n")

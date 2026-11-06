@@ -178,6 +178,10 @@ func duplicatedCollisionPrefix(folder string, testCasesByFolder map[string][]*te
 	return "", false
 }
 
+// Maestro 2.11.0 names a sharded run's flow folders <flow>-shard-N, and puts the -N collision suffix after that
+// (TestDebugReporter.resolveFlowDir). When one shard runs, for example a retry of a single flow, it adds no shard
+// suffix. Check the naming when raising maestro_version: a folder this does not match is reported as belonging to no
+// test case, and its files and step list are left out of Test Reports.
 var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-\d+((?:-\d+)*)$`)
 
 // withoutShardSuffix turns a sharded run's Login-shard-2 folder into Login, and Login-shard-2-2 into Login-2.

@@ -2,7 +2,6 @@ package step
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -69,9 +68,21 @@ func parseBootedSimulators(output string) ([]runningDevice, error) {
 	return simulators, nil
 }
 
+// deviceWords is how the error messages name a platform's devices and how to start one.
+type deviceWords struct {
+	one, many, state, start, starter string
+}
+
+func wordsFor(platform Platform) deviceWords {
+	if platform == PlatformIOS {
+		return deviceWords{one: "iOS simulator", many: "iOS simulators", state: "booted", start: "boot", starter: "Xcode Start Simulator"}
+	}
+	return deviceWords{one: "Android emulator or device", many: "Android devices", state: "running", start: "start", starter: "AVD Manager"}
+}
+
 // expectedDevices checks that exactly count devices of the platform run. Maestro picks the running devices on its own,
 // so with more devices the flows could run on another one than the app was installed on, and with fewer Maestro cannot
-// start every shard.
+// start every shard. A Config built without configFromInput has no count, and runs on one device.
 func expectedDevices(platform Platform, devices []runningDevice, count int) ([]runningDevice, error) {
 	count = max(count, 1)
 	if len(devices) == count {
@@ -82,20 +93,14 @@ func expectedDevices(platform Platform, devices []runningDevice, count int) ([]r
 	for _, device := range devices {
 		names = append(names, device.Name)
 	}
-	running := fmt.Sprintf("%d Android devices are running", len(devices))
-	if platform == PlatformIOS {
-		running = fmt.Sprintf("%d iOS simulators are booted", len(devices))
-	}
+	words := wordsFor(platform)
+	running := fmt.Sprintf("%d %s are %s", len(devices), words.many, words.state)
 
 	switch {
-	case len(devices) == 0 && count == 1 && platform == PlatformAndroid:
-		return nil, errors.New("no Android emulator or device is running, start one before this Step, for example with AVD Manager")
 	case len(devices) == 0 && count == 1:
-		return nil, errors.New("no iOS simulator is booted, boot one before this Step, for example with Xcode Start Simulator")
-	case len(devices) == 0 && platform == PlatformAndroid:
-		return nil, fmt.Errorf("shard_split is %d, but no Android emulator or device is running: start %d before this Step, for example with AVD Manager", count, count)
+		return nil, fmt.Errorf("no %s is %s, %s one before this Step, for example with %s", words.one, words.state, words.start, words.starter)
 	case len(devices) == 0:
-		return nil, fmt.Errorf("shard_split is %d, but no iOS simulator is booted: boot %d before this Step, for example with Xcode Start Simulator", count, count)
+		return nil, fmt.Errorf("shard_split is %d, but no %s is %s: %s %d before this Step, for example with %s", count, words.one, words.state, words.start, count, words.starter)
 	case count == 1:
 		return nil, fmt.Errorf("%s (%s), the Step runs the flows on one device unless shard_split is set: set shard_split to %d to split the flows across them, or run one device per machine with parallel Pipeline Workflows", running, strings.Join(names, ", "), len(devices))
 	default:
@@ -107,6 +112,16 @@ func deviceIDs(devices []runningDevice) []string {
 	var ids []string
 	for _, device := range devices {
 		ids = append(ids, device.ID)
+	}
+	return ids
+}
+
+// shardDeviceIDs returns the devices an attempt runs its shards on. A retry runs flow files, so it needs no more devices
+// than it has flows. Maestro 2.11.0 coerces the shard count to the flow count on its own, but the Step does not rely
+// on it.
+func shardDeviceIDs(ids, flowPaths []string, retry bool) []string {
+	if retry && len(flowPaths) < len(ids) {
+		return ids[:len(flowPaths)]
 	}
 	return ids
 }

@@ -84,6 +84,40 @@ func TestConfigFromInput_ShardSplit(t *testing.T) {
 	assert.ErrorContains(t, err, "additional_args: remove --shard-all, set the shard_split input")
 }
 
+func TestConfigFromInput_ShardSplitRejectsDeviceArg(t *testing.T) {
+	input := testInput()
+	input.AdditionalArgs = "--device emulator-5554"
+	input.ShardSplit = 2
+	_, err := configFromInput(input)
+	assert.ErrorContains(t, err, "additional_args: remove --device, the Step runs the flows on the devices it installs the app on")
+
+	input.ShardSplit = 1
+	_, err = configFromInput(input)
+	require.NoError(t, err, "the Step does not pass --device for one device")
+}
+
+func TestConfigFromInput_ShardSplitRejectsExecutionOrder(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "config.yaml"), "executionOrder:\n  flowsOrder:\n    - Login\n")
+	input := testInput()
+	input.FlowPath = flowDir
+	input.ShardSplit = 2
+	_, err := configFromInput(input)
+	assert.ErrorContains(t, err, filepath.Join(flowDir, "config.yaml")+" orders the flows with executionOrder, which Maestro cannot split across devices")
+
+	input.ShardSplit = 1
+	_, err = configFromInput(input)
+	require.NoError(t, err)
+
+	userConfig := filepath.Join(t.TempDir(), "user.yaml")
+	writeFile(t, userConfig, "executionOrder:\n  flowsOrder:\n    - Login\n")
+	input = testInput()
+	input.AdditionalArgs = "--config " + userConfig
+	input.ShardSplit = 2
+	_, err = configFromInput(input)
+	assert.ErrorContains(t, err, userConfig+" orders the flows", "the config additional_args passes is checked")
+}
+
 func testInput() Input {
 	return Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", MaestroVersion: "2.11.0", ShardSplit: 1}
 }

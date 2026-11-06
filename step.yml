@@ -103,7 +103,9 @@ inputs:
     description: |-
       The number of running emulators or simulators Maestro splits the flows across with `--shard-split`. Each device runs a part of the flows, and the results are reported together.
 
-      Exactly this many devices of the app's platform must run: the Step fails before installing the app if it finds more or fewer. The Step installs the app on each device.
+      Exactly this many devices of the app's platform must run: the Step fails before installing the app if it finds more or fewer. The Step installs the app on each device, and runs the flows on those devices, so do not pass `--device` in `additional_args`.
+
+      Flows ordered with `executionOrder` in the workspace config cannot be split across devices: Maestro runs a sequence on one device.
 
       Set it here instead of passing `--shard-split` in `additional_args`. `--shard-all` is not supported.
     is_required: true

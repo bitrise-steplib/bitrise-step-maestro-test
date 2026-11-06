@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
 	"github.com/bitrise-io/go-steputils/v2/testquarantine"
@@ -141,8 +142,11 @@ func configFromInput(input Input) (Config, error) {
 	if input.ShardSplit < 1 {
 		return Config{}, fmt.Errorf("shard_split: must be 1 or more, got: %d", input.ShardSplit)
 	}
-	if name, ok := shardArg(additionalArgs); ok {
+	if name, ok := findArg(additionalArgs, shardArgNames...); ok {
 		return Config{}, fmt.Errorf("additional_args: remove %s, set the shard_split input to split the flows across several devices (--shard-all is not supported)", name)
+	}
+	if name, ok := findArg(additionalArgs, deviceArgNames...); ok && input.ShardSplit > 1 {
+		return Config{}, fmt.Errorf("additional_args: remove %s, the Step runs the flows on the devices it installs the app on when shard_split is above 1", name)
 	}
 
 	app, err := parseApp(input.AppPath)
@@ -160,7 +164,7 @@ func configFromInput(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("quarantined_tests: %w", err)
 	}
 
-	return Config{
+	config := Config{
 		FlowPaths:       flowPaths,
 		App:             app,
 		IncludeTags:     splitList(input.IncludeTags),
@@ -175,7 +179,12 @@ func configFromInput(input Input) (Config, error) {
 		TestResultDir:   input.TestResultDir,
 		DeployDir:       input.DeployDir,
 		AndroidSDKDir:   findAndroidSDKDir(input.AndroidHome, input.AndroidSDKRoot),
-	}, nil
+	}
+	// Maestro refuses to split a sequence of flows across shards.
+	if workspaceConfig := workspaceConfig(config); config.ShardSplit > 1 && ordersFlows(workspaceConfig) {
+		return Config{}, fmt.Errorf("shard_split: %s orders the flows with executionOrder, which Maestro cannot split across devices: set shard_split to 1, or remove executionOrder", workspaceConfig)
+	}
+	return config, nil
 }
 
 func (s Step) InstallDependencies(config Config) (Installation, error) {
@@ -214,6 +223,7 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 	}
 
 	flowPaths := config.FlowPaths
+	ids := deviceIDs(devices)
 	var runErr error
 	for number := 1; ; number++ {
 		attempt, err := newAttempt(workDir, number)
@@ -228,7 +238,7 @@ func (s Step) Run(config Config, installation Installation) (Result, error) {
 		} else {
 			s.logger.Infof("Attempt %d of %d: running the failed flows again", number, config.FlakyAttempts+1)
 		}
-		runErr = s.runMaestro(installation, testArgs(config, attempt, flowPaths, deviceIDs(devices)))
+		runErr = s.runMaestro(installation, testArgs(config, attempt, flowPaths, shardDeviceIDs(ids, flowPaths, number > 1)))
 
 		if runErr == nil || number > config.FlakyAttempts {
 			break
@@ -447,7 +457,8 @@ func (s Step) mergedReport(attempts []Attempt, sharded bool) (testreport.TestRep
 	return mergeReports(reports), linked, true
 }
 
-// installApp installs the app on every device the flows run on, and returns the devices.
+// installApp installs the app on every device the flows run on, and returns the devices. The installs run at the same
+// time, so the install does not take longer with every device, and each one's output is printed once they are done.
 func (s Step) installApp(config Config) ([]runningDevice, error) {
 	devices, err := s.findDevices(config)
 	if err != nil {
@@ -456,18 +467,53 @@ func (s Step) installApp(config Config) ([]runningDevice, error) {
 
 	s.logger.Println()
 	s.logger.Infof("Installing app")
-	for _, device := range devices {
-		name, args := installAppCommand(config.App, device.ID, config.AndroidSDKDir)
-		cmd := s.commandFactory.Create(name, args, &command.Opts{Stdout: os.Stdout, Stderr: os.Stderr})
+	installs := make([]appInstall, len(devices))
+	var wg sync.WaitGroup
+	for i, device := range devices {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			installs[i] = s.installAppOn(config, device)
+		}()
+	}
+	wg.Wait()
+
+	var failed error
+	for _, install := range installs {
 		if len(devices) > 1 {
-			s.logger.Printf("Device: %s", device.Name)
+			s.logger.Printf("Device: %s", install.device.Name)
 		}
-		s.logger.TDonef("$ %s", cmd.PrintableCommandArgs())
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("%s: %w", errInstallApp, fmt.Errorf("%s: %w", config.App.Path, err))
+		s.logger.TDonef("$ %s", install.command)
+		if install.output != "" {
+			s.logger.Printf("%s", install.output)
+		}
+		if install.err != nil && failed == nil {
+			target := config.App.Path
+			if len(devices) > 1 {
+				target += " on " + install.device.Name
+			}
+			failed = fmt.Errorf("%s: %w", target, install.err)
 		}
 	}
+	if failed != nil {
+		return nil, fmt.Errorf("%s: %w", errInstallApp, failed)
+	}
 	return devices, nil
+}
+
+// appInstall is the outcome of installing the app on one device.
+type appInstall struct {
+	device  runningDevice
+	command string
+	output  string
+	err     error
+}
+
+func (s Step) installAppOn(config Config, device runningDevice) appInstall {
+	name, args := installAppCommand(config.App, device.ID, config.AndroidSDKDir)
+	cmd := s.commandFactory.Create(name, args, nil)
+	output, err := cmd.RunAndReturnTrimmedCombinedOutput()
+	return appInstall{device: device, command: cmd.PrintableCommandArgs(), output: output, err: err}
 }
 
 func (s Step) findDevices(config Config) ([]runningDevice, error) {
