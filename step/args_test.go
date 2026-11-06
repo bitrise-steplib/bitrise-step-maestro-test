@@ -56,7 +56,7 @@ func TestTestArgs(t *testing.T) {
 		"--exclude-tags", "flaky",
 		"--no-reinstall-driver",
 		".maestro",
-	}, testArgs(config, attempt, config.FlowPaths))
+	}, testArgs(config, attempt, config.FlowPaths, nil))
 }
 
 func TestTestArgs_Minimal(t *testing.T) {
@@ -64,7 +64,7 @@ func TestTestArgs_Minimal(t *testing.T) {
 	config := Config{FlowPaths: []string{"flows/login.yaml"}, App: App{Path: "My.app", Platform: PlatformIOS}}
 	assert.Equal(t, []string{
 		"test", "--platform", "ios", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "flows/login.yaml",
-	}, testArgs(config, attempt, config.FlowPaths), "Maestro runs on a device of the app's platform when an emulator and a simulator both run")
+	}, testArgs(config, attempt, config.FlowPaths, nil), "Maestro runs on a device of the app's platform when an emulator and a simulator both run")
 }
 
 func TestTestArgs_MultipleFlowPaths(t *testing.T) {
@@ -72,7 +72,7 @@ func TestTestArgs_MultipleFlowPaths(t *testing.T) {
 	config := Config{FlowPaths: []string{"maestro/entry", "maestro/unlock"}, App: App{Path: "app.apk", Platform: PlatformAndroid}}
 	assert.Equal(t, []string{
 		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "maestro/entry", "maestro/unlock",
-	}, testArgs(config, attempt, config.FlowPaths))
+	}, testArgs(config, attempt, config.FlowPaths, nil))
 }
 
 func TestTestArgs_WorkspaceConfig(t *testing.T) {
@@ -80,7 +80,38 @@ func TestTestArgs_WorkspaceConfig(t *testing.T) {
 	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, WorkspaceConfig: ".maestro/config.yaml"}
 	assert.Equal(t, []string{
 		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out", "--config", ".maestro/config.yaml", ".maestro/login.yaml",
-	}, testArgs(config, attempt, []string{".maestro/login.yaml"}), "a retry of flow files keeps the folder's config")
+	}, testArgs(config, attempt, []string{".maestro/login.yaml"}, nil), "a retry of flow files keeps the folder's config")
+}
+
+func TestTestArgs_ShardSplit(t *testing.T) {
+	attempt := Attempt{JUnitPath: "/tmp/report.xml", TestOutputDir: "/tmp/out"}
+	config := Config{FlowPaths: []string{".maestro"}, App: App{Path: "app.apk", Platform: PlatformAndroid}, ShardSplit: 2}
+	assert.Equal(t, []string{
+		"test", "--platform", "android", "--format", "junit", "--output", "/tmp/report.xml", "--test-output-dir", "/tmp/out",
+		"--shard-split", "2", "--device", "emulator-5554,emulator-5556",
+		".maestro",
+	}, testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554", "emulator-5556"}))
+
+	config.ShardSplit = 1
+	assert.NotContains(t, testArgs(config, attempt, config.FlowPaths, []string{"emulator-5554"}), "--shard-split")
+}
+
+func TestShardArg(t *testing.T) {
+	for _, args := range [][]string{
+		{"--shard-split", "2"},
+		{"--shard-split=2"},
+		{"--no-reinstall-driver", "--shard-all=2"},
+		{"--shards", "2"},
+		{"-s", "2"},
+	} {
+		_, ok := shardArg(args)
+		assert.True(t, ok, args)
+	}
+	name, _ := shardArg([]string{"--shard-all=2"})
+	assert.Equal(t, "--shard-all", name)
+
+	_, ok := shardArg([]string{"--no-reinstall-driver", "--device", "emulator-5554"})
+	assert.False(t, ok)
 }
 
 func TestConfigArg(t *testing.T) {

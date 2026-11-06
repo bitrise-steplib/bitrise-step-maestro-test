@@ -67,8 +67,25 @@ func TestConfigFromInput_AndroidSDKDir(t *testing.T) {
 	assert.Empty(t, config.AndroidSDKDir, "a missing SDK only fails the steps that need it")
 }
 
+func TestConfigFromInput_ShardSplit(t *testing.T) {
+	input := testInput()
+	input.ShardSplit = 3
+	config, err := configFromInput(input)
+	require.NoError(t, err)
+	assert.Equal(t, 3, config.ShardSplit)
+
+	input.ShardSplit = 0
+	_, err = configFromInput(input)
+	assert.ErrorContains(t, err, "shard_split: must be 1 or more")
+
+	input = testInput()
+	input.AdditionalArgs = "--no-reinstall-driver --shard-all 2"
+	_, err = configFromInput(input)
+	assert.ErrorContains(t, err, "additional_args: remove --shard-all, set the shard_split input")
+}
+
 func testInput() Input {
-	return Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", MaestroVersion: "2.11.0"}
+	return Input{FlowPath: ".maestro", AppPath: "app.apk", TestName: "Maestro", MaestroVersion: "2.11.0", ShardSplit: 1}
 }
 
 func TestPhaseErrors_FirstLineIsStable(t *testing.T) {

@@ -69,24 +69,44 @@ func parseBootedSimulators(output string) ([]runningDevice, error) {
 	return simulators, nil
 }
 
-// Maestro picks a running device on its own, so with several devices the flows could run on another one than the app
-// was installed on.
-func singleDevice(platform Platform, devices []runningDevice) (runningDevice, error) {
+// expectedDevices checks that exactly count devices of the platform run. Maestro picks the running devices on its own,
+// so with more devices the flows could run on another one than the app was installed on, and with fewer Maestro cannot
+// start every shard.
+func expectedDevices(platform Platform, devices []runningDevice, count int) ([]runningDevice, error) {
+	count = max(count, 1)
+	if len(devices) == count {
+		return devices, nil
+	}
+
 	var names []string
 	for _, device := range devices {
 		names = append(names, device.Name)
 	}
+	running := fmt.Sprintf("%d Android devices are running", len(devices))
+	if platform == PlatformIOS {
+		running = fmt.Sprintf("%d iOS simulators are booted", len(devices))
+	}
 
 	switch {
-	case len(devices) == 1:
-		return devices[0], nil
+	case len(devices) == 0 && count == 1 && platform == PlatformAndroid:
+		return nil, errors.New("no Android emulator or device is running, start one before this Step, for example with AVD Manager")
+	case len(devices) == 0 && count == 1:
+		return nil, errors.New("no iOS simulator is booted, boot one before this Step, for example with Xcode Start Simulator")
 	case len(devices) == 0 && platform == PlatformAndroid:
-		return runningDevice{}, errors.New("no Android emulator or device is running, start one before this Step, for example with AVD Manager")
+		return nil, fmt.Errorf("shard_split is %d, but no Android emulator or device is running: start %d before this Step, for example with AVD Manager", count, count)
 	case len(devices) == 0:
-		return runningDevice{}, errors.New("no iOS simulator is booted, boot one before this Step, for example with Xcode Start Simulator")
-	case platform == PlatformAndroid:
-		return runningDevice{}, fmt.Errorf("%d Android devices are running (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(names, ", "))
+		return nil, fmt.Errorf("shard_split is %d, but no iOS simulator is booted: boot %d before this Step, for example with Xcode Start Simulator", count, count)
+	case count == 1:
+		return nil, fmt.Errorf("%s (%s), the Step runs the flows on one device unless shard_split is set: set shard_split to %d to split the flows across them, or run one device per machine with parallel Pipeline Workflows", running, strings.Join(names, ", "), len(devices))
 	default:
-		return runningDevice{}, fmt.Errorf("%d iOS simulators are booted (%s), the Step supports one device per machine: to run the flows on several devices, use parallel Pipeline Workflows", len(devices), strings.Join(names, ", "))
+		return nil, fmt.Errorf("shard_split is %d, but %s (%s): run exactly %d, or set shard_split to %d", count, running, strings.Join(names, ", "), count, len(devices))
 	}
+}
+
+func deviceIDs(devices []runningDevice) []string {
+	var ids []string
+	for _, device := range devices {
+		ids = append(ids, device.ID)
+	}
+	return ids
 }

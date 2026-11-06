@@ -146,7 +146,7 @@ func TestLinkAttachments_KeepsExistingAttachmentNames(t *testing.T) {
 		}},
 	}}}}}
 
-	result := linkAttachments(&report, map[string]flowBundle{"Flow A": {Files: []string{"logs/maestro.log", "screenshots/final.png", "logs/device-logcat.txt"}}})
+	result := linkAttachments(&report, map[string]flowBundle{"Flow A": {Files: []string{"logs/maestro.log", "screenshots/final.png", "logs/device-logcat.txt"}}}, false)
 
 	assert.Empty(t, result.Warnings)
 	assert.Equal(t, []testreport.Property{
@@ -164,7 +164,7 @@ func TestLinkAttachments_SkipsAmbiguousFlowNames(t *testing.T) {
 		{TestCases: []testreport.TestCase{{Name: "Login"}}},
 	}}
 
-	result := linkAttachments(&report, map[string]flowBundle{"Login": {Files: []string{"logs/maestro.log"}}})
+	result := linkAttachments(&report, map[string]flowBundle{"Login": {Files: []string{"logs/maestro.log"}}}, false)
 
 	assert.Empty(t, result.Linked)
 	assert.Len(t, result.Warnings, 1)
@@ -185,7 +185,7 @@ func TestLinkAttachments_CollidingFlowFolders(t *testing.T) {
 		"Login-2":   {Files: []string{"logs/maestro.log"}},
 		"Login-2-2": {Files: []string{"logs/maestro.log"}},
 		"Settings":  {Files: []string{"logs/maestro.log"}},
-	})
+	}, false)
 
 	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
 	assert.Len(t, result.Warnings, 3)
@@ -208,10 +208,49 @@ func TestLinkAttachments_CascadingFlowFolderCollisions(t *testing.T) {
 		"Login-2-2":   {Files: []string{"logs/maestro.log"}},
 		"Login-2-2-2": {Files: []string{"logs/maestro.log"}},
 		"Settings":    {Files: []string{"logs/maestro.log"}},
-	})
+	}, false)
 
 	assert.Equal(t, map[string][]string{"Settings": {"Settings/logs/maestro.log"}}, attachmentsByTestCase(report))
 	assert.Len(t, result.Warnings, 4)
+}
+
+func TestLinkAttachments_ShardedFlowFolders(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Checkout"},
+		{Name: "Settings"},
+		{Name: "Settings"},
+	}}}}
+
+	// Each shard suffixes its folders with -shard-N, and a colliding name gets its -N after that.
+	result := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-1":      {Files: []string{"logs/maestro.log"}},
+		"Checkout-shard-2":   {Files: []string{"logs/maestro.log"}},
+		"Settings-shard-1":   {Files: []string{"logs/maestro.log"}},
+		"Settings-shard-1-2": {Files: []string{"logs/maestro.log"}},
+	}, true)
+
+	assert.Equal(t, map[string][]string{
+		"Login":    {"Login-shard-1/logs/maestro.log"},
+		"Checkout": {"Checkout-shard-2/logs/maestro.log"},
+	}, attachmentsByTestCase(report))
+	assert.Len(t, result.Warnings, 2, "the two Settings flows cannot be told apart")
+}
+
+func TestLinkAttachments_KeepsShardSuffixWhenNotSharded(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{{Name: "Login-shard-1"}}}}}
+
+	result := linkAttachments(&report, map[string]flowBundle{"Login-shard-1": {Files: []string{"logs/maestro.log"}}}, false)
+
+	assert.Empty(t, result.Warnings)
+	assert.Equal(t, map[string][]string{"Login-shard-1": {"Login-shard-1/logs/maestro.log"}}, attachmentsByTestCase(report))
+}
+
+func TestWithoutShardSuffix(t *testing.T) {
+	assert.Equal(t, "Login", withoutShardSuffix("Login-shard-2"))
+	assert.Equal(t, "Login-2", withoutShardSuffix("Login-shard-2-2"))
+	assert.Equal(t, "Login-2-2", withoutShardSuffix("Login-shard-10-2-2"))
+	assert.Equal(t, "Login", withoutShardSuffix("Login"))
 }
 
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {

@@ -19,7 +19,9 @@ Add **Deploy to Bitrise.io** after this Step to upload the results.
 
 The Step runs the flows on a device that is already running. Start one before this Step with **AVD Manager** (Android) or **Xcode Start Simulator** (iOS).
 
-Only one device of the app's platform may run: the Step fails before installing the app if it finds none or several. To run the flows on several devices, use parallel Pipeline Workflows, see the examples below.
+By default only one device of the app's platform may run: the Step fails before installing the app if it finds none or several.
+
+To split the flows across several devices on the same machine, start them all before this Step and set **Number of devices to split the flows across** (`shard_split`) to their number. To run the flows on several machines, use parallel Pipeline Workflows, see the examples below.
 
 #### Flow variables
 
@@ -80,6 +82,26 @@ Run only the flows tagged `smoke`, and skip the ones tagged `flaky`:
     - exclude_tags: flaky
 ```
 
+Split the flows across two iOS simulators on the same VM. Start both with **Xcode Start Simulator** before the Step, and set `shard_split` to the number of booted simulators:
+```yaml
+- xcode-build-for-simulator: {}
+- xcode-start-simulator:
+    title: Start the first simulator
+    inputs:
+    - destination: platform=iOS Simulator,name=iPhone 17,OS=latest
+    - wait_for_boot_timeout: 120
+- xcode-start-simulator:
+    title: Start the second simulator
+    inputs:
+    - destination: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+    - wait_for_boot_timeout: 120
+- maestro-test:
+    inputs:
+    - app_path: $BITRISE_APP_DIR_PATH
+    - shard_split: 2
+- deploy-to-bitrise-io: {}
+```
+
 Split the flows across parallel Pipeline Workflows, each running on its own VM with one emulator. Tag the flows `shard0` and `shard1`, and every copy of the Workflow runs the flows tagged with its index:
 ```yaml
 pipelines:
@@ -122,6 +144,7 @@ workflows:
 | `exclude_tags` | Skip the flows that have any of these tags (comma or newline separated). |  |  |
 | `test_name` | The name the results are shown under on the Test Reports page. | required | `Maestro` |
 | `num_flaky_test_attempts` | Specifies the number of times a failed flow should be reattempted. Only the failed flows run again, with the same tags and arguments.  A flow that initially fails but succeeds on any reattempt is reported as flaky and does not fail the Step. The maximum number of reruns allowed is 10. (Default: 0, which implies no reruns.)  Rerunning a flow needs Maestro 2.6.0 or newer. Failed flows do not run again when the workspace config orders the flows with `executionOrder`. | required | `0` |
+| `shard_split` | The number of running emulators or simulators Maestro splits the flows across with `--shard-split`. Each device runs a part of the flows, and the results are reported together.  Exactly this many devices of the app's platform must run: the Step fails before installing the app if it finds more or fewer. The Step installs the app on each device.  Set it here instead of passing `--shard-split` in `additional_args`. `--shard-all` is not supported. | required | `1` |
 | `maestro_version` | The Maestro CLI version to install. The default is the version this Step release was tested with.  Change it only when you need a different version before a new Step release ships it. Untested versions can run your flows, but the Step's test output handling is only guaranteed for the tested version.  Use the version number from a [Maestro release](https://github.com/mobile-dev-inc/maestro/releases) tag without the `cli-` prefix, `2.1.0` or newer. | required | `2.11.0` |
 | `additional_args` | Extra arguments appended to the `maestro test` command, for example `--no-reinstall-driver`. |  |  |
 | `quarantined_tests` | JSON list of tests added to quarantine on Bitrise.io, quarantined tests are excluded from test runs.  Skipping a flow that the Step finds in a `flow_path` folder needs Maestro 2.9.0 or newer. Flow files listed in `flow_path` are skipped with any version.  A flow found in a `flow_path` folder is skipped by its path inside that folder. If another `flow_path` folder has a file with the same path, that file is skipped too, and the Step logs a warning.  The Step reports each flow with the class name `<platform>:<flow file>`, for example `android:.maestro/login.yaml`, instead of the flow's name or its `junitClassname`, so that quarantining a flow on one platform does not skip it on the other. |  | `$BITRISE_QUARANTINED_TESTS_JSON` |
