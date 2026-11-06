@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/v2/testasset"
@@ -182,11 +183,21 @@ func duplicatedCollisionPrefix(folder string, testCasesByFolder map[string][]*te
 // (TestDebugReporter.resolveFlowDir). When one shard runs, for example a retry of a single flow, it adds no shard
 // suffix. Check the naming when raising maestro_version: a folder this does not match is reported as belonging to no
 // test case, and its files and step list are left out of Test Reports.
-var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-\d+((?:-\d+)*)$`)
+var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-(\d+)((?:-\d+)*)$`)
 
 // withoutShardSuffix turns a sharded run's Login-shard-2 folder into Login, and Login-shard-2-2 into Login-2.
 func withoutShardSuffix(folder string) string {
-	return shardFolderSuffix.ReplaceAllString(folder, "$1$2")
+	return shardFolderSuffix.ReplaceAllString(folder, "$1$3")
+}
+
+// folderShard returns the shard a sharded run's flow folder belongs to: 2 for Login-shard-2 and Login-shard-2-3.
+func folderShard(folder string) (int, bool) {
+	match := shardFolderSuffix.FindStringSubmatch(folder)
+	if match == nil {
+		return 0, false
+	}
+	shard, err := strconv.Atoi(match[2])
+	return shard, err == nil
 }
 
 // flowFolderName mirrors how Maestro names a flow's output folder.

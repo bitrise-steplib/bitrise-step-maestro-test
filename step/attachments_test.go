@@ -253,6 +253,16 @@ func TestWithoutShardSuffix(t *testing.T) {
 	assert.Equal(t, "Login", withoutShardSuffix("Login"))
 }
 
+func TestFolderShard(t *testing.T) {
+	for folder, want := range map[string]int{"Login-shard-2": 2, "Login-shard-2-3": 2, "Login-shard-12": 12} {
+		shard, ok := folderShard(folder)
+		assert.True(t, ok, folder)
+		assert.Equal(t, want, shard, folder)
+	}
+	_, ok := folderShard("Login")
+	assert.False(t, ok)
+}
+
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
 	flowDir := filepath.Join(t.TempDir(), "flows", "Flow A")
 	writeFlowBundle(t, flowDir, `{"entries":[

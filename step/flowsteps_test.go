@@ -355,3 +355,30 @@ func TestReadFlowSteps_IgnoresManifestPathsOutsideTheFlowFolder(t *testing.T) {
 
 	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
 }
+
+func TestReadShardFlowSteps_ReadsOnlyTheFlowsShard(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
+		{"metadata": {"status": "COMPLETED", "duration": 1}},
+		{"metadata": {"status": "COMPLETED", "duration": 2}},
+		{"metadata": {"status": "FAILED", "duration": 3}}
+	]`)
+	// The flow ran on shard 2 while a flow ran on shard 1, and Maestro wrote both shards' lines into its log.
+	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "[shard 1] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.001", "Start", "[shard 2] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.002", "Finished", "[shard 2] Launch app \"com.example\"", "COMPLETED"),
+		logLine("12:00:00.003", "Start", "[shard 2] Tap on \"Settings\"", "RUNNING"),
+		logLine("12:00:00.004", "Start", "[shard 1] Tap on \"Reader\"", "RUNNING"),
+		logLine("12:00:00.005", "Start", "[shard 2] Assert that id: BackButton is visible", "RUNNING"),
+		logLine("12:00:00.006", "Start", "[shard 12] Tap on \"Other\"", "RUNNING"),
+	}, ""))
+
+	steps, err := readShardFlowSteps(flowDir, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []string{`Launch app "com.example"`, `Tap on "Settings"`, "Assert that id: BackButton is visible"}, stepNames(steps))
+	assert.Equal(t, []string{"COMPLETED", "COMPLETED", "FAILED"}, stepStatuses(steps))
+
+	_, err = readFlowSteps(flowDir)
+	assert.ErrorContains(t, err, "has 3 commands but logs/maestro.log names 6", "an unsharded read takes every line")
+}
