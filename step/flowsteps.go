@@ -81,15 +81,11 @@ func flowFilePaths(flowDir string) (commandsPath, logPath string) {
 // maestro.log. Both list every command that started, in order, so the n-th name in the log belongs to the n-th record.
 // The steps are returned only when the two files list the same number of commands, because a wrong name is worse than
 // no list.
-func readFlowSteps(flowDir string) ([]flowStep, error) {
-	return readShardFlowSteps(flowDir, 0)
-}
-
-// readShardFlowSteps reads the steps of a flow that ran in the given shard of a sharded run, 0 when the run was not
-// sharded. The shards run at the same time, and a flow's maestro.log also has the lines of the flows that ran on the
-// other shards meanwhile. Maestro prefixes each command line with the shard, "[shard 2] ", so only the lines of the
-// flow's own shard are read.
-func readShardFlowSteps(flowDir string, shard int) ([]flowStep, error) {
+//
+// The shard is the one the flow ran on in a sharded run, 0 when the run was not sharded. The shards run at the same
+// time, and a flow's maestro.log also has the lines of the flows that ran on the other shards meanwhile. Maestro
+// prefixes each command line with the shard, "[shard 2] ", so only the lines of the flow's own shard are read.
+func readFlowSteps(flowDir string, shard int) ([]flowStep, error) {
 	commandsPath, logPath := flowFilePaths(flowDir)
 
 	data, err := os.ReadFile(filepath.Join(flowDir, commandsPath))

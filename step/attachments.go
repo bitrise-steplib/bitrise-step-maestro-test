@@ -49,6 +49,9 @@ type flowBundle struct {
 	AttemptDir string
 	// TestCase is the flow's test case in the report, set when the bundle is linked to it.
 	TestCase *testreport.TestCase
+	// Shard is the shard the flow ran on in a sharded run, taken from the folder name when the bundle is linked, and 0
+	// when the run was not sharded or the folder has no shard suffix.
+	Shard int
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
@@ -135,9 +138,10 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
-		flowFolder := folder
+		flowFolder, shard := folder, 0
 		if sharded {
 			flowFolder = withoutShardSuffix(folder)
+			shard, _ = folderShard(folder)
 		}
 		if prefix, ok := duplicatedCollisionPrefix(flowFolder, testCasesByFolder); ok {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
@@ -158,6 +162,7 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		exportDir := path.Join(bundle.AttemptDir, folder)
 		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
 		bundle.TestCase = testCases[0]
+		bundle.Shard = shard
 		result.Linked[exportDir] = bundle
 	}
 	return result
