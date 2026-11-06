@@ -42,7 +42,7 @@ func TestReadFlowSteps_MatchesGolden(t *testing.T) {
 	for _, flowDir := range flowDirs {
 		platform := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(flowDir))))
 		t.Run(platform+"/"+filepath.Base(flowDir), func(t *testing.T) {
-			steps, err := readFlowSteps(flowDir)
+			steps, err := readFlowSteps(flowDir, 0)
 			require.NoError(t, err)
 			got, err := json.MarshalIndent(steps, "", "  ")
 			require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestReadFlowSteps_ACommandTextCanSpanSeveralLines(t *testing.T) {
 		testCommand{name: `Assert that "Fixture page" is visible`, status: "COMPLETED"},
 	)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
@@ -96,7 +96,7 @@ func TestReadFlowSteps_LinesOfOtherLogEntriesDoNotChangeTheNames(t *testing.T) {
 		logLine("12:00:01.000", "Finished", "Tap on id: button", "FAILED"),
 	}, ""))
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Define variables", "Tap on id: button"}, stepNames(steps))
@@ -111,7 +111,7 @@ func TestReadFlowSteps_NeverReadsTheFlowEnv(t *testing.T) {
 		evaluatedCommand: `{"defineVariablesCommand": {"env": {"PASSWORD": "s3cret-value"}}}`,
 	})
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	got, err := json.Marshal(steps)
@@ -128,7 +128,7 @@ func TestReadFlowSteps_DoesNotResolvePlaceholders(t *testing.T) {
 		command: `{"inputTextCommand": {"text": "${PASSWORD}"}}`,
 	})
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	require.Len(t, steps, 1)
@@ -143,7 +143,7 @@ func TestReadFlowSteps_FailsWhenTheFilesListDifferentNumbersOfCommands(t *testin
 		testCommand{name: "Tap on id: button", status: "COMPLETED", skipInLog: true},
 	)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 
 	assert.Nil(t, steps)
 	assert.ErrorContains(t, err, "has 3 commands but logs/maestro.log names 2")
@@ -158,7 +158,7 @@ func TestReadFlowSteps_FailsWhenACommandHasNoStatus(t *testing.T) {
 	writeFile(t, filepath.Join(flowDir, "commands.json"),
 		`[{"command": {}, "metadata": {"status": "COMPLETED", "duration": 1, "depth": 0}}, {"command": {}, "metadata": {"state": "COMPLETED", "duration": 1, "depth": 0}}]`)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 
 	assert.Nil(t, steps)
 	assert.ErrorContains(t, err, "command 2 of commands.json has no status")
@@ -168,7 +168,7 @@ func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 	flowDir := t.TempDir()
 	writeFile(t, filepath.Join(flowDir, "commands.json"), `[{"metadata": {"status": "COMPLETED", "duration": 1, "depth": 0}}]`)
 
-	_, err := readFlowSteps(flowDir)
+	_, err := readFlowSteps(flowDir, 0)
 
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -176,7 +176,7 @@ func TestReadFlowSteps_FailsWithoutLog(t *testing.T) {
 func TestReadFlowSteps_PassingFlow(t *testing.T) {
 	for _, fixture := range mobileFixtures {
 		t.Run(fixture.platform, func(t *testing.T) {
-			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-passing"))
+			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-passing"), 0)
 			require.NoError(t, err)
 
 			assert.Equal(t, []string{
@@ -198,7 +198,7 @@ func TestReadFlowSteps_PassingFlow(t *testing.T) {
 func TestReadFlowSteps_FailingFlow(t *testing.T) {
 	for _, fixture := range mobileFixtures {
 		t.Run(fixture.platform, func(t *testing.T) {
-			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-failing"))
+			steps, err := readFlowSteps(fixtureFlowDir(t, fixture.outputDir, "fixture-failing"), 0)
 			require.NoError(t, err)
 
 			assert.Equal(t, []string{
@@ -324,7 +324,7 @@ func TestReadFlowSteps_FindsTheFilesTheManifestNames(t *testing.T) {
 		{"kind":"COMMAND_METADATA","relativePath":"meta/cmds.json"},
 		{"kind":"MAESTRO_LOG","relativePath":"meta/run.log"}]}`)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
@@ -335,7 +335,7 @@ func TestReadFlowSteps_UsesTheDefaultPathsForWhatTheManifestDoesNotName(t *testi
 	writeFlowFiles(t, flowDir, testCommand{name: "Launch app", status: "COMPLETED"})
 	writeFile(t, filepath.Join(flowDir, manifestFileName), `{"entries":[{"kind":"SCREENSHOT","relativePath":"screenshots"}]}`)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
@@ -350,8 +350,35 @@ func TestReadFlowSteps_IgnoresManifestPathsOutsideTheFlowFolder(t *testing.T) {
 		{"kind":"COMMAND_METADATA","relativePath":"../outside.json"},
 		{"kind":"MAESTRO_LOG","relativePath":"`+filepath.ToSlash(filepath.Join(outer, "outside.log"))+`"}]}`)
 
-	steps, err := readFlowSteps(flowDir)
+	steps, err := readFlowSteps(flowDir, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Launch app"}, stepNames(steps))
+}
+
+func TestReadFlowSteps_ReadsOnlyTheFlowsShard(t *testing.T) {
+	flowDir := t.TempDir()
+	writeFile(t, filepath.Join(flowDir, "commands.json"), `[
+		{"metadata": {"status": "COMPLETED", "duration": 1}},
+		{"metadata": {"status": "COMPLETED", "duration": 2}},
+		{"metadata": {"status": "FAILED", "duration": 3}}
+	]`)
+	// The flow ran on shard 2 while a flow ran on shard 1, and Maestro wrote both shards' lines into its log.
+	writeFile(t, filepath.Join(flowDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "[shard 1] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.001", "Start", "[shard 2] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.002", "Finished", "[shard 2] Launch app \"com.example\"", "COMPLETED"),
+		logLine("12:00:00.003", "Start", "[shard 2] Tap on \"Settings\"", "RUNNING"),
+		logLine("12:00:00.004", "Start", "[shard 1] Tap on \"Reader\"", "RUNNING"),
+		logLine("12:00:00.005", "Start", "[shard 2] Assert that id: BackButton is visible", "RUNNING"),
+		logLine("12:00:00.006", "Start", "[shard 12] Tap on \"Other\"", "RUNNING"),
+	}, ""))
+
+	steps, err := readFlowSteps(flowDir, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []string{`Launch app "com.example"`, `Tap on "Settings"`, "Assert that id: BackButton is visible"}, stepNames(steps))
+	assert.Equal(t, []string{"COMPLETED", "COMPLETED", "FAILED"}, stepStatuses(steps))
+
+	_, err = readFlowSteps(flowDir, 0)
+	assert.ErrorContains(t, err, "has 3 commands but logs/maestro.log names 6", "an unsharded read takes every line")
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/v2/testasset"
@@ -48,6 +49,9 @@ type flowBundle struct {
 	AttemptDir string
 	// TestCase is the flow's test case in the report, set when the bundle is linked to it.
 	TestCase *testreport.TestCase
+	// Shard is the shard the flow ran on in a sharded run, taken from the folder name when the bundle is linked, and 0
+	// when the run was not sharded or the folder has no shard suffix.
+	Shard int
 }
 
 // findFlowBundles reads the per-flow folders Maestro writes under <test-output-dir>/<timestamp>/<flow>/,
@@ -134,9 +138,10 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 
 	result := attachmentLinkResult{Linked: map[string]flowBundle{}}
 	for _, folder := range slices.Sorted(maps.Keys(bundles)) {
-		flowFolder := folder
+		flowFolder, shard := folder, 0
 		if sharded {
 			flowFolder = withoutShardSuffix(folder)
+			shard, _ = folderShard(folder)
 		}
 		if prefix, ok := duplicatedCollisionPrefix(flowFolder, testCasesByFolder); ok {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("more than one flow is named %q, so Maestro output folder %q may belong to any of them, its files and step list are not added", testCasesByFolder[prefix][0].Name, folder))
@@ -157,6 +162,7 @@ func linkAttachments(report *testreport.TestReport, bundles map[string]flowBundl
 		exportDir := path.Join(bundle.AttemptDir, folder)
 		addAttachmentProperties(testCases[0], exportDir, bundle.Files)
 		bundle.TestCase = testCases[0]
+		bundle.Shard = shard
 		result.Linked[exportDir] = bundle
 	}
 	return result
@@ -182,11 +188,21 @@ func duplicatedCollisionPrefix(folder string, testCasesByFolder map[string][]*te
 // (TestDebugReporter.resolveFlowDir). When one shard runs, for example a retry of a single flow, it adds no shard
 // suffix. Check the naming when raising maestro_version: a folder this does not match is reported as belonging to no
 // test case, and its files and step list are left out of Test Reports.
-var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-\d+((?:-\d+)*)$`)
+var shardFolderSuffix = regexp.MustCompile(`^(.+)-shard-(\d+)((?:-\d+)*)$`)
 
 // withoutShardSuffix turns a sharded run's Login-shard-2 folder into Login, and Login-shard-2-2 into Login-2.
 func withoutShardSuffix(folder string) string {
-	return shardFolderSuffix.ReplaceAllString(folder, "$1$2")
+	return shardFolderSuffix.ReplaceAllString(folder, "$1$3")
+}
+
+// folderShard returns the shard a sharded run's flow folder belongs to: 2 for Login-shard-2 and Login-shard-2-3.
+func folderShard(folder string) (int, bool) {
+	match := shardFolderSuffix.FindStringSubmatch(folder)
+	if match == nil {
+		return 0, false
+	}
+	shard, err := strconv.Atoi(match[2])
+	return shard, err == nil
 }
 
 // flowFolderName mirrors how Maestro names a flow's output folder.

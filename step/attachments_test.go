@@ -253,6 +253,16 @@ func TestWithoutShardSuffix(t *testing.T) {
 	assert.Equal(t, "Login", withoutShardSuffix("Login"))
 }
 
+func TestFolderShard(t *testing.T) {
+	for folder, want := range map[string]int{"Login-shard-2": 2, "Login-shard-2-3": 2, "Login-shard-12": 12} {
+		shard, ok := folderShard(folder)
+		assert.True(t, ok, folder)
+		assert.Equal(t, want, shard, folder)
+	}
+	_, ok := folderShard("Login")
+	assert.False(t, ok)
+}
+
 func TestAttachableFiles_IgnoresPathsOutsideTheFlowFolder(t *testing.T) {
 	flowDir := filepath.Join(t.TempDir(), "flows", "Flow A")
 	writeFlowBundle(t, flowDir, `{"entries":[
@@ -341,4 +351,53 @@ func propertyValue(testCase testreport.TestCase, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestAddStepLists_ReadsEachShardedFlowFromItsOwnShard(t *testing.T) {
+	report := testreport.TestReport{TestSuites: []testreport.TestSuite{{TestCases: []testreport.TestCase{
+		{Name: "Login"},
+		{Name: "Checkout"},
+	}}}}
+
+	// Login ran on shard 2 while shard 1 was running Checkout, so Login's log has both shards' lines. Checkout is a
+	// retry of one flow, which Maestro runs on one shard with no suffix and no prefix.
+	outputDir := t.TempDir()
+	loginDir := filepath.Join(outputDir, "Login-shard-2")
+	writeFile(t, filepath.Join(loginDir, "commands.json"), `[
+		{"metadata": {"status": "COMPLETED", "duration": 1}},
+		{"metadata": {"status": "FAILED", "duration": 2}}
+	]`)
+	writeFile(t, filepath.Join(loginDir, "logs", "maestro.log"), strings.Join([]string{
+		logLine("12:00:00.000", "Start", "[shard 1] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.001", "Start", "[shard 2] Launch app \"com.example\"", "RUNNING"),
+		logLine("12:00:00.002", "Start", "[shard 1] Tap on \"Cart\"", "RUNNING"),
+		logLine("12:00:00.003", "Start", "[shard 2] Tap on \"Sign in\"", "RUNNING"),
+	}, ""))
+	checkoutDir := filepath.Join(outputDir, "Checkout")
+	writeFlowFiles(t, checkoutDir, testCommand{name: `Tap on "Cart"`, status: "COMPLETED"})
+
+	link := linkAttachments(&report, map[string]flowBundle{
+		"Login-shard-2": {Dir: loginDir},
+		"Checkout":      {Dir: checkoutDir},
+	}, true)
+	require.Empty(t, link.Warnings)
+
+	testStep().addStepLists(link)
+
+	assert.Equal(t, 2, link.Linked["Login-shard-2"].Shard)
+	assert.Equal(t, 0, link.Linked["Checkout"].Shard)
+	assert.Equal(t, map[string]string{
+		"Login":    formatStepList([]flowStep{{Name: `Launch app "com.example"`, Status: "COMPLETED", DurationMs: 1}, {Name: `Tap on "Sign in"`, Status: "FAILED", DurationMs: 2}}),
+		"Checkout": formatStepList([]flowStep{{Name: `Tap on "Cart"`, Status: "COMPLETED", DurationMs: 1}}),
+	}, systemOutsByTestCase(report))
+}
+
+func systemOutsByTestCase(report testreport.TestReport) map[string]string {
+	outs := map[string]string{}
+	forEachTestCase(&report, func(testCase *testreport.TestCase) {
+		if testCase.SystemOut != nil {
+			outs[testCase.Name] = testCase.SystemOut.Value
+		}
+	})
+	return outs
 }
